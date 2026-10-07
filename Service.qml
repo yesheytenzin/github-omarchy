@@ -65,7 +65,11 @@ Item {
     saveState()
   }
 
-  function toggleScope() { setScope(root.scope === "mine" ? "all" : "mine") }
+  // Personal → both → organizations → personal. The panel's chips also set
+  // a scope directly; this is the one-key path.
+  function toggleScope() {
+    setScope(root.scope === "mine" ? "all" : (root.scope === "all" ? "orgs" : "mine"))
+  }
 
   function refresh() {
     if (fetchProc.running) return

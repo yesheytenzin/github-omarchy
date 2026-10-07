@@ -31,11 +31,13 @@ BarWidget {
     if (!root.service) return "GitHub"
     if (root.service.errorKind !== "") return "GitHub · " + root.service.errorKind + " — open the panel for the fix"
     var counts = root.service.counts
-    var withOrgs = root.service.scope === "all"
-    var issues = counts.mine.issues + (withOrgs ? counts.orgs.issues : 0)
-    var prs = counts.mine.prs + (withOrgs ? counts.orgs.prs : 0)
-    return "GitHub · " + (withOrgs ? "personal + orgs" : "personal")
-      + " · " + issues + " open issues · " + prs + " open pull requests"
+    var scope = root.service.scope
+    var withMine = scope !== "orgs"
+    var withOrgs = scope !== "mine"
+    var issues = (withMine ? counts.mine.issues : 0) + (withOrgs ? counts.orgs.issues : 0)
+    var prs = (withMine ? counts.mine.prs : 0) + (withOrgs ? counts.orgs.prs : 0)
+    var label = scope === "orgs" ? "orgs" : (scope === "all" ? "personal + orgs" : "personal")
+    return "GitHub · " + label + " · " + issues + " open issues · " + prs + " open pull requests"
   }
 
   // The shell routes `omarchy-shell shell summon|hide|toggle tenzin.github-oma`

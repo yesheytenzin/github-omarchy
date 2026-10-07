@@ -32,10 +32,20 @@ Panel {
 
   readonly property var rows: root.service ? root.service.rows : []
   readonly property var counts: root.service ? root.service.counts : GithubModel.countsFor(GithubModel.emptyScopes())
-  readonly property bool withOrgs: root.service ? root.service.scope === "all" : false
-  readonly property int shownIssues: counts.mine.issues + (withOrgs ? counts.orgs.issues : 0)
-  readonly property int shownPrs: counts.mine.prs + (withOrgs ? counts.orgs.prs : 0)
-  readonly property int orgTotal: counts.orgs.issues + counts.orgs.prs
+  readonly property string scope: root.service ? root.service.scope : "mine"
+  readonly property bool withMine: scope !== "orgs"
+  readonly property bool withOrgs: scope !== "mine"
+  readonly property int shownIssues: (withMine ? counts.mine.issues : 0) + (withOrgs ? counts.orgs.issues : 0)
+  readonly property int shownPrs: (withMine ? counts.mine.prs : 0) + (withOrgs ? counts.orgs.prs : 0)
+
+  // Personal, both, and organizations as one row of chips. "all" stays the
+  // stored value for the merged view so existing state files keep working.
+  readonly property var scopeOptions: [
+    { value: "mine", label: "Personal · " + (counts.mine.issues + counts.mine.prs) },
+    { value: "all", label: "Both · " + (counts.mine.issues + counts.mine.prs + counts.orgs.issues + counts.orgs.prs) },
+    { value: "orgs", label: "Orgs · " + (counts.orgs.issues + counts.orgs.prs) }
+  ]
+  readonly property int scopeCount: root.scopeOptions.length
   readonly property var notice: root.service && root.service.errorKind !== ""
     ? GithubModel.errorNotice(root.service.errorKind, root.service.errorMessage) : null
   readonly property string truncation: root.service
@@ -100,21 +110,24 @@ Panel {
   function syncIndexes() {
     if (!root.service) return
     root.tabIndex = root.service.tab === "prs" ? 1 : 0
-    root.scopeIndex = root.service.scope === "all" ? 1 : 0
+    root.scopeIndex = Math.max(0, root.scopeValues().indexOf(root.service.scope))
   }
+
+  // Chip order, and the values the chips carry. "all" is the merged view.
+  function scopeValues() { return ["mine", "all", "orgs"] }
 
   function moveCursor(dx, dy) {
     var step = dy !== 0 ? dy : dx
     if (step === 0) return
     if (root.section === "tabs") root.tabIndex = clamp(root.tabIndex + step, 0, 1)
-    else if (root.section === "scope") root.scopeIndex = clamp(root.scopeIndex + step, 0, 1)
+    else if (root.section === "scope") root.scopeIndex = clamp(root.scopeIndex + step, 0, root.scopeCount - 1)
     else if (root.rows.length > 0) root.listIndex = clamp(root.listIndex + step, 0, root.rows.length - 1)
   }
 
   function activate() {
     if (!root.service) return
     if (root.section === "tabs") root.service.setTab(root.tabIndex === 0 ? "issues" : "prs")
-    else if (root.section === "scope") root.service.setScope(root.scopeIndex === 0 ? "mine" : "all")
+    else if (root.section === "scope") root.service.setScope(scopeValues()[root.scopeIndex])
     else root.openSelection()
   }
 
@@ -263,11 +276,8 @@ Panel {
         }
 
         ButtonGroup {
-          options: [
-            { value: "mine", label: "Personal" },
-            { value: "all", label: "+ Orgs · " + root.orgTotal }
-          ]
-          value: root.service ? root.service.scope : "mine"
+          options: root.scopeOptions
+          value: root.scope
           foreground: root.foreground
           fontFamily: root.fontFamily
           focusable: false
@@ -468,7 +478,7 @@ Panel {
         Text {
           width: parent.width
           textFormat: Text.PlainText
-          text: "j/k move · 1/2 issues/prs · m orgs · enter open · r refresh · tab sections · esc close"
+          text: "j/k move · 1/2 issues/prs · m scope · enter open · r refresh · tab sections · esc close"
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption

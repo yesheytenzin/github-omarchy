@@ -42,6 +42,7 @@ QtObject {
       testMerge()
       testStrings()
       testLabels()
+      testScopes()
       testNotices()
       testChips()
     } catch (error) {
@@ -100,7 +101,7 @@ QtObject {
         orgs: {
           issues: field(4, [
             item("https://x/d", "2026-09-30T10:00:00Z", { scope: "orgs", needsMe: true })
-          ], false),
+          ], true),
           prs: field(1, [
             item("https://x/e", "2026-10-01T12:00:00Z", { type: "pr", scope: "orgs" })
           ], false)
@@ -221,6 +222,35 @@ QtObject {
     expectEqual(Model.labelRgba("#00ff00", 1), "rgba(0,255,0,1)", "a leading hash is fine")
     expectEqual(Model.labelRgba("", 0.5), "rgba(128,128,128,0.5)", "a missing color falls back to grey")
     expectEqual(Model.labelRgba("zzzzzz", 0.5), "rgba(128,128,128,0.5)", "a broken color falls back to grey")
+  }
+
+  // ---- scopes -------------------------------------------------------------
+
+  function testScopes() {
+    var scopes = parse(payload()).scopes
+
+    expectEqual(Model.clampScope("orgs"), "orgs", "orgs is a scope")
+    expectEqual(Model.clampScope("nonsense"), "mine", "an unknown scope falls back to personal")
+    expectEqual(Model.parseState('{"scope":"orgs"}').scope, "orgs", "an orgs scope round-trips")
+    expect(Model.serializeState("orgs", "prs").indexOf('"scope": "orgs"') !== -1, "an orgs scope serializes")
+
+    // Orgs-only shows org rows and nothing personal, and the counts follow.
+    var orgItems = Model.itemsFor(scopes, "orgs", "issues")
+    expectEqual(orgItems.length, 1, "orgs-only lists just the org rows")
+    expectEqual(orgItems[0].url, "https://x/d", "the org row is the org issue")
+    expectEqual(Model.itemsFor(scopes, "orgs", "issues")[0].scope, "orgs", "the org row is tagged as orgs")
+    expectEqual(Model.itemsFor(scopes, "orgs", "prs").length, 1, "orgs-only lists org PRs too")
+
+    expectEqual(Model.badgeCount(scopes, "orgs"), 5, "the orgs badge counts org items only")
+    expectEqual(Model.badgeCount(scopes, "mine"), 4, "the personal badge stays personal")
+    expectEqual(Model.badgeCount(scopes, "all"), 9, "the both badge is the sum")
+    expectEqual(Model.attentionCount(scopes, "orgs"), 1, "attention follows the scope")
+
+    contains(Model.updatedMeta(scopes, "orgs", 0, false, 0), "4 issues", "the orgs hero counts org issues")
+    contains(Model.updatedMeta(scopes, "orgs", 0, false, 0), "1 pull request", "the orgs hero does not pluralize one")
+    expectEqual(Model.updatedMeta(scopes, "orgs", 0, false, 0).indexOf("personal") !== -1, "false", "the orgs hero counts nothing personal")
+    expectEqual(Model.truncationHint(scopes, "orgs", "issues"), "Showing the most recent 1 of 4.", "orgs truncation is explained")
+    expectEqual(Model.truncationHint(Model.emptyScopes(), "orgs", "issues"), "", "an empty org scope is not truncated")
   }
 
   function testNotices() {

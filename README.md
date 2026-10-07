@@ -17,17 +17,19 @@ opens one in the browser.
 
 An item shows up when it is **open** and it **involves you** — you authored
 it, you are assigned, you were mentioned, or your review was requested
-(`involves:@me`). The scope decides which repos are searched:
+(`involves:@me`). The scope decides which repos are searched, and the panel's
+scope chips switch between all three:
 
-| Scope | Repos searched |
-|-------|----------------|
-| `Personal` | repos owned by your account (`user:<login>`) |
-| `+ Orgs · N` | personal repos **plus** every organization you can reach, one search per org |
+| Chip | Scope | Repos searched |
+|------|-------|----------------|
+| `Personal · n` | `mine` | repos owned by your account (`user:<login>`) |
+| `Both · n` | `all` | personal repos plus every organization |
+| `Orgs · n` | `orgs` | only repos owned by organizations you can reach, one search per org |
 
 Organizations are discovered from your memberships and from the orgs that own
-repos you can see, so a private membership still shows up. The toggle sticks:
-it lives in `~/.local/state/omarchy/github-oma/state.json` and survives
-restarts.
+repos you can see, so a private membership still shows up. `m` cycles
+Personal → Both → Orgs. The choice sticks: it lives in
+`~/.local/state/omarchy/github-oma/state.json` and survives restarts.
 
 ## States and colours
 
@@ -85,7 +87,7 @@ omarchy plugin enable tenzin.github-oma
 | `j` / `k` | Move through the list (or the focused chip row) |
 | `Tab` / `Shift+Tab` | Cycle the sections: tabs → scope → list |
 | `1` / `2` | Issues / pull requests |
-| `m` | Toggle organizations on and off |
+| `m` | Cycle the scope: Personal → Both → Orgs |
 | `Enter` / `o` | Open the selection in the browser |
 | `g` / `G` | Jump to the top / bottom |
 | `r` | Refresh now |

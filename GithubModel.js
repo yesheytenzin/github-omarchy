@@ -24,8 +24,12 @@ function emptyScopes() {
   }
 }
 
+// "mine" = personal repos only, "orgs" = organizations only, "all" = both
+// merged. The panel's scope chips cycle through the three.
 function clampScope(value) {
-  return value === "all" ? "all" : "mine"
+  if (value === "all") return "all"
+  if (value === "orgs") return "orgs"
+  return "mine"
 }
 
 function clampTab(value) {
@@ -230,14 +234,17 @@ function dedupe(items) {
 function fieldFor(scopes, scope, tab) {
   var source = isObject(scopes) ? scopes : emptyScopes()
   var key = clampTab(tab)
-  if (clampScope(scope) === "mine") {
-    var mine = source.mine ? source.mine[key] : emptyField()
-    // The helper already sorts, but the panel must not depend on that: one
-    // ordering rule here covers both scopes.
-    return { count: mine.count, items: sortedByUpdated(mine.items), truncated: mine.truncated }
-  }
   var mineField = source.mine ? source.mine[key] : emptyField()
   var orgField = source.orgs ? source.orgs[key] : emptyField()
+  var name = clampScope(scope)
+  // The helper already sorts, but the panel must not depend on that: one
+  // ordering rule here covers every scope.
+  if (name === "mine") {
+    return { count: mineField.count, items: sortedByUpdated(mineField.items), truncated: mineField.truncated }
+  }
+  if (name === "orgs") {
+    return { count: orgField.count, items: sortedByUpdated(orgField.items), truncated: orgField.truncated }
+  }
   return {
     count: mineField.count + orgField.count,
     items: sortedByUpdated(dedupe(mineField.items.concat(orgField.items))),
@@ -265,7 +272,9 @@ function countsFor(scopes) {
 
 function badgeCount(scopes, scope) {
   var counts = countsFor(scopes)
-  if (clampScope(scope) === "mine") return counts.mine.issues + counts.mine.prs
+  var name = clampScope(scope)
+  if (name === "mine") return counts.mine.issues + counts.mine.prs
+  if (name === "orgs") return counts.orgs.issues + counts.orgs.prs
   return counts.mine.issues + counts.mine.prs + counts.orgs.issues + counts.orgs.prs
 }
 
@@ -286,8 +295,11 @@ function plural(count, singular, pluralForm) {
 // stays lowercase: "4 issues · 2 pull requests · updated 2m ago".
 function updatedMeta(scopes, scope, fetchedAtSec, loading, nowMs) {
   var counts = countsFor(scopes)
-  var issues = counts.mine.issues + (clampScope(scope) === "all" ? counts.orgs.issues : 0)
-  var prs = counts.mine.prs + (clampScope(scope) === "all" ? counts.orgs.prs : 0)
+  var name = clampScope(scope)
+  var withMine = name !== "orgs"
+  var withOrgs = name !== "mine"
+  var issues = (withMine ? counts.mine.issues : 0) + (withOrgs ? counts.orgs.issues : 0)
+  var prs = (withMine ? counts.mine.prs : 0) + (withOrgs ? counts.orgs.prs : 0)
   var parts = [plural(issues, "issue", "issues"), plural(prs, "pull request", "pull requests")]
   var summary = parts.join(" · ")
   if (loading) return "refreshing — " + summary

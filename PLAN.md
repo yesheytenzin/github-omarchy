@@ -258,6 +258,7 @@ Deltas from the plan above, all verified on the live shell:
 | Panel owns an IpcHandler | The `Panel` base's ShellIpc (`open`/`close`/`toggle`) is enough; the bar widget provides the host summon shape (`open`/`close`/`opened`) |
 | — | Failure payloads carry no `scopes`, so the model parses them as typed failures. Found live: without this, every failure rendered as "unreadable reply" instead of the fix |
 | — | The bar badge counts issues + PRs in the current scope, capped at `99+` |
+| Scope toggle: `Personal` / `Personal + Orgs` | Three chips: `Personal` / `Both` / `Orgs`, so an orgs-only view exists; `m` cycles them |
 | — | `.pragma library` JS and the mounted service survive a hot reload; changing them needs `omarchy-restart-shell` (documented in the README) |
 
 Verified live: `omarchy plugin validate` clean, 39 test checks green, counts
