@@ -258,7 +258,7 @@ Deltas from the plan above, all verified on the live shell:
 | Panel owns an IpcHandler | The `Panel` base's ShellIpc (`open`/`close`/`toggle`) is enough; the bar widget provides the host summon shape (`open`/`close`/`opened`) |
 | — | Failure payloads carry no `scopes`, so the model parses them as typed failures. Found live: without this, every failure rendered as "unreadable reply" instead of the fix |
 | — | The bar badge counts issues + PRs in the current scope, capped at `99+` |
-| Scope toggle: `Personal` / `Personal + Orgs` | Three chips: `Personal` / `Both` / `Orgs`, so an orgs-only view exists; `m` cycles them |
+| Scope toggle: `Personal` / `Personal + Orgs` | Two chips in the end: `Personal` and `Orgs` (a three-way version with a merged `Both` view shipped first and was dropped on request; a stale `all` in state.json clamps to personal) |
 | — | A third tab, `Repos · n`: every reachable repo in per-owner buckets (mine / orgs / collaborator), starred-then-freshest first; org repos need their own per-org query because `viewer.repositories(ownerAffiliations: [ORGANIZATION_MEMBER])` hides them |
 | — | `.pragma library` JS and the mounted service survive a hot reload; changing them needs `omarchy-restart-shell` (documented in the README) |
 

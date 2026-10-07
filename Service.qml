@@ -35,8 +35,8 @@ Item {
   property string errorKind: ""
   property string errorMessage: ""
 
-  // "mine" = personal repos only, "all" = personal + organizations. The
-  // panel's toggle writes these, and they survive restarts via state.json.
+  // "mine" = personal repos, "orgs" = organizations. The panel's chips write
+  // these, and they survive restarts via state.json.
   property string scope: "mine"
   property string tab: "issues"
 
@@ -75,10 +75,10 @@ Item {
     saveState()
   }
 
-  // Personal → both → organizations → personal. The panel's chips also set
-  // a scope directly; this is the one-key path.
+  // Personal ⇄ organizations. The panel's chips also set a scope directly;
+  // this is the one-key path.
   function toggleScope() {
-    setScope(root.scope === "mine" ? "all" : (root.scope === "all" ? "orgs" : "mine"))
+    setScope(root.scope === "mine" ? "orgs" : "mine")
   }
 
   function refresh() {

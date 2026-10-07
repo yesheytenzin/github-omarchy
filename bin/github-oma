@@ -189,16 +189,15 @@ def build_query(login: str, orgs: list[str]) -> str:
     for index, org in enumerate(orgs):
         fields.append(search_field(f"orgIssues{index}", f"is:issue is:open involves:@me org:{org} sort:updated-desc"))
         fields.append(search_field(f"orgPrs{index}", f"is:pr is:open involves:@me org:{org} sort:updated-desc"))
-    # The repos view. The viewer's own and collaborator repos come from one
-    # connection; organization repos need their own query per org, because
+    # The repos view. The viewer's own repos come from one connection;
+    # organization repos need their own query per org, because
     # viewer.repositories(ownerAffiliations: [ORGANIZATION_MEMBER]) only lists
     # the org repos the membership itself grants (one, in practice) and would
     # hide every repo the viewer actually works in.
     fields.insert(0, (
         "viewer {"
         " owned: repositories(ownerAffiliations: [OWNER]) { totalCount }"
-        " collab: repositories(ownerAffiliations: [COLLABORATOR]) { totalCount }"
-        f" repos: repositories(first: {MAX_ITEMS}, ownerAffiliations: [OWNER, COLLABORATOR],"
+        f" repos: repositories(first: {MAX_ITEMS}, ownerAffiliations: [OWNER],"
         " orderBy: {field: PUSHED_AT, direction: DESC})"
         " { totalCount pageInfo { hasNextPage } nodes { ...RepoParts } }"
         "}"
@@ -289,15 +288,7 @@ def normalize_repo(node: dict, login: str) -> dict | None:
     if not name:
         return None
     owner = node.get("owner") or {}
-    owner_login = str(owner.get("login", ""))
-    if owner_login == login:
-        scope = "mine"
-    elif str(owner.get("__typename", "")) == "Organization":
-        scope = "orgs"
-    else:
-        # Somebody else's repo that the viewer can push to or read; reachable
-        # through "Both" but not owned by the account or an org.
-        scope = "other"
+    scope = "mine" if str(owner.get("login", "")) == login else "orgs"
     return {
         "kind": "repo",
         "nameWithOwner": name,
@@ -314,15 +305,14 @@ def normalize_repo(node: dict, login: str) -> dict | None:
 
 
 def parse_repos(viewer: dict | None, orgs: list[str], data: dict, login: str) -> dict:
-    """Three buckets — the viewer's own repos, organization repos, and repos
-    owned by other people that the viewer can still reach — each with the
-    exact total for its chip and the rows we managed to fetch.
+    """Two buckets — the viewer's own repos and organization repos — each with
+    the exact total for its chip and the rows we managed to fetch.
     """
-    buckets = {key: {"count": 0, "truncated": False, "items": []} for key in ("mine", "orgs", "other")}
+    buckets = {key: {"count": 0, "truncated": False, "items": []} for key in ("mine", "orgs")}
     if not isinstance(viewer, dict):
         return buckets
 
-    seen = {"mine": set(), "orgs": set(), "other": set()}
+    seen = {"mine": set(), "orgs": set()}
 
     def add(scope: str, repo: dict | None) -> None:
         if not repo or repo["nameWithOwner"] in seen[scope]:
@@ -352,7 +342,6 @@ def parse_repos(viewer: dict | None, orgs: list[str], data: dict, login: str) ->
         return total_count(field) if isinstance(field, dict) else 0
 
     buckets["mine"]["count"] = total("owned") or len(buckets["mine"]["items"])
-    buckets["other"]["count"] = total("collab") or len(buckets["other"]["items"])
     org_total = 0
     for index in range(len(orgs)):
         connection = data.get(f"orgRepos{index}")

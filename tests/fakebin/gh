@@ -120,14 +120,12 @@ def repo(name, pushed, open_issues, open_prs, owner_type, owner, starred=False, 
 
 VIEWER = {
     "owned": {"totalCount": 2},
-    "collab": {"totalCount": 1},
     "repos": {
-        "totalCount": 3,
+        "totalCount": 2,
         "pageInfo": {"hasNextPage": False},
         "nodes": [
             repo("yesheytenzin/auto-workspace", "2026-10-07T09:15:47Z", 1, 0, "User", "yesheytenzin", starred=True, private=True),
             repo("yesheytenzin/job_application_portal", "2026-08-03T04:57:25Z", 0, 2, "User", "yesheytenzin"),
-            repo("ChodajMi/demoapp", "2026-09-01T00:00:00Z", 0, 0, "User", "ChodajMi", archived=True, stars=3),
         ],
     },
 }
@@ -138,7 +136,7 @@ ORG_REPOS = {
     "pageInfo": {"hasNextPage": False},
     "nodes": [
         repo("acme-corp/widgets", "2026-10-06T10:00:00Z", 6, 16, "Organization", "acme-corp"),
-        repo("acme-corp/toolkit", "2026-09-20T08:00:00Z", 0, 1, "Organization", "acme-corp"),
+        repo("acme-corp/toolkit", "2026-09-20T08:00:00Z", 0, 1, "Organization", "acme-corp", archived=True, stars=3),
     ],
 }
 

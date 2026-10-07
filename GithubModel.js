@@ -24,12 +24,11 @@ function emptyScopes() {
   }
 }
 
-// "mine" = personal repos only, "orgs" = organizations only, "all" = both
-// merged. The panel's scope chips cycle through the three.
+// "mine" = personal repos, "orgs" = organizations. A state file written by an
+// older build may still say "all"; it clamps to personal, the same silent
+// fallback every unknown value gets.
 function clampScope(value) {
-  if (value === "all") return "all"
-  if (value === "orgs") return "orgs"
-  return "mine"
+  return value === "orgs" ? "orgs" : "mine"
 }
 
 function clampTab(value) {
@@ -45,7 +44,7 @@ function emptyRepoBucket() {
 // The helper buckets repos by who owns them, so the scope chips can label
 // themselves and the list can filter without re-deriving anything.
 function emptyRepoField() {
-  return { mine: emptyRepoBucket(), orgs: emptyRepoBucket(), other: emptyRepoBucket() }
+  return { mine: emptyRepoBucket(), orgs: emptyRepoBucket() }
 }
 
 function normalizeRepo(raw) {
@@ -57,7 +56,7 @@ function normalizeRepo(raw) {
     kind: "repo",
     nameWithOwner: name !== "" ? name : url,
     url: url !== "" ? url : "https://github.com/" + name,
-    scope: raw.scope === "orgs" ? "orgs" : (raw.scope === "other" ? "other" : "mine"),
+    scope: raw.scope === "orgs" ? "orgs" : "mine",
     private: raw.private === true,
     archived: raw.archived === true,
     pushedAt: String(raw.pushedAt || ""),
@@ -92,8 +91,7 @@ function normalizeRepoField(raw) {
   if (!isObject(raw)) return emptyRepoField()
   return {
     mine: normalizeRepoBucket("mine", raw.mine),
-    orgs: normalizeRepoBucket("orgs", raw.orgs),
-    other: normalizeRepoBucket("other", raw.other)
+    orgs: normalizeRepoBucket("orgs", raw.orgs)
   }
 }
 
@@ -282,37 +280,15 @@ function sortedByUpdated(items) {
   return copy
 }
 
-function dedupe(items) {
-  var seen = {}
-  var result = []
-  for (var i = 0; i < items.length; i++) {
-    var item = items[i]
-    if (seen[item.url]) continue
-    seen[item.url] = true
-    result.push(item)
-  }
-  return result
-}
 
 function fieldFor(scopes, scope, tab) {
   var source = isObject(scopes) ? scopes : emptyScopes()
   var key = clampTab(tab)
-  var mineField = source.mine ? source.mine[key] : emptyField()
-  var orgField = source.orgs ? source.orgs[key] : emptyField()
-  var name = clampScope(scope)
+  var bucket = clampScope(scope) === "orgs" ? source.orgs : source.mine
+  var field = bucket && bucket[key] ? bucket[key] : emptyField()
   // The helper already sorts, but the panel must not depend on that: one
   // ordering rule here covers every scope.
-  if (name === "mine") {
-    return { count: mineField.count, items: sortedByUpdated(mineField.items), truncated: mineField.truncated }
-  }
-  if (name === "orgs") {
-    return { count: orgField.count, items: sortedByUpdated(orgField.items), truncated: orgField.truncated }
-  }
-  return {
-    count: mineField.count + orgField.count,
-    items: sortedByUpdated(dedupe(mineField.items.concat(orgField.items))),
-    truncated: mineField.truncated || orgField.truncated
-  }
+  return { count: field.count, items: sortedByUpdated(field.items), truncated: field.truncated }
 }
 
 function itemsFor(scopes, scope, tab) {
@@ -335,10 +311,8 @@ function countsFor(scopes) {
 
 function badgeCount(scopes, scope) {
   var counts = countsFor(scopes)
-  var name = clampScope(scope)
-  if (name === "mine") return counts.mine.issues + counts.mine.prs
-  if (name === "orgs") return counts.orgs.issues + counts.orgs.prs
-  return counts.mine.issues + counts.mine.prs + counts.orgs.issues + counts.orgs.prs
+  var bucket = clampScope(scope) === "orgs" ? counts.orgs : counts.mine
+  return bucket.issues + bucket.prs
 }
 
 function attentionCount(scopes, scope) {
@@ -358,11 +332,9 @@ function plural(count, singular, pluralForm) {
 // stays lowercase: "4 issues · 2 pull requests · updated 2m ago".
 function updatedMeta(scopes, scope, fetchedAtSec, loading, nowMs) {
   var counts = countsFor(scopes)
-  var name = clampScope(scope)
-  var withMine = name !== "orgs"
-  var withOrgs = name !== "mine"
-  var issues = (withMine ? counts.mine.issues : 0) + (withOrgs ? counts.orgs.issues : 0)
-  var prs = (withMine ? counts.mine.prs : 0) + (withOrgs ? counts.orgs.prs : 0)
+  var bucket = clampScope(scope) === "orgs" ? counts.orgs : counts.mine
+  var issues = bucket.issues
+  var prs = bucket.prs
   var parts = [plural(issues, "issue", "issues"), plural(prs, "pull request", "pull requests")]
   var summary = parts.join(" · ")
   if (loading) return "refreshing — " + summary
@@ -379,10 +351,9 @@ function truncationHint(scopes, scope, tab) {
 
 // ---- repos ----------------------------------------------------------------
 //
-// The repos view is a different list from the issue/PR searches: every repo
-// the viewer can reach, tagged by who owns it. "Personal" shows the account's
-// own repos, "Orgs" the organizations', and "Both" everything — including
-// repos owned by other people that the viewer can still reach.
+// The repos view is a different list from the issue/PR searches: one bucket
+// per scope. "Personal" shows the account's own repos, "Orgs" the repos owned
+// by the organizations the viewer can reach.
 
 // Starred first, freshest push next, then name. One comparator, not three
 // stable passes: this engine's Array.sort does not promise stability, so
@@ -396,13 +367,9 @@ function compareRepos(a, b) {
 
 function reposFor(repos, scope) {
   var field = isObject(repos) ? repos : emptyRepoField()
-  var name = clampScope(scope)
+  var bucket = clampScope(scope) === "orgs" ? (field.orgs || emptyRepoBucket()) : (field.mine || emptyRepoBucket())
   var items = []
-  var keys = name === "mine" ? ["mine"] : (name === "orgs" ? ["orgs"] : ["mine", "orgs", "other"])
-  for (var k = 0; k < keys.length; k++) {
-    var bucket = field[keys[k]] || emptyRepoBucket()
-    for (var i = 0; i < bucket.items.length; i++) items.push(bucket.items[i])
-  }
+  for (var i = 0; i < bucket.items.length; i++) items.push(bucket.items[i])
   items.sort(compareRepos)
   return items
 }
@@ -418,10 +385,7 @@ function bucketCount(bucket) {
 
 function repoCountFor(repos, scope) {
   var field = isObject(repos) ? repos : emptyRepoField()
-  var name = clampScope(scope)
-  if (name === "mine") return bucketCount(field.mine)
-  if (name === "orgs") return bucketCount(field.orgs)
-  return bucketCount(field.mine) + bucketCount(field.orgs) + bucketCount(field.other)
+  return bucketCount(clampScope(scope) === "orgs" ? field.orgs : field.mine)
 }
 
 function repoMeta(repos, scope, fetchedAtSec, loading, nowMs) {
@@ -449,25 +413,16 @@ function repoLine(repo, nowMs) {
 function repoCounts(repos) {
   return {
     mine: repoCountFor(repos, "mine"),
-    orgs: repoCountFor(repos, "orgs"),
-    all: repoCountFor(repos, "all")
+    orgs: repoCountFor(repos, "orgs")
   }
 }
 
 function reposTruncationHint(repos, scope) {
   var field = isObject(repos) ? repos : emptyRepoField()
-  var name = clampScope(scope)
-  var keys = name === "mine" ? ["mine"] : (name === "orgs" ? ["orgs"] : ["mine", "orgs", "other"])
-  var shown = 0
-  var total = 0
-  var truncated = false
-  for (var i = 0; i < keys.length; i++) {
-    var bucket = field[keys[i]] || emptyRepoBucket()
-    shown += Array.isArray(bucket.items) ? bucket.items.length : 0
-    total += bucketCount(bucket)
-    truncated = truncated || bucket.truncated === true
-  }
-  if (!truncated || total <= shown) return ""
+  var bucket = clampScope(scope) === "orgs" ? (field.orgs || emptyRepoBucket()) : (field.mine || emptyRepoBucket())
+  var shown = Array.isArray(bucket.items) ? bucket.items.length : 0
+  var total = bucketCount(bucket)
+  if (bucket.truncated !== true || total <= shown) return ""
   return "Showing the most recent " + shown + " of " + total + "."
 }
 

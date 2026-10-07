@@ -24,12 +24,11 @@ scope chips switch between all three:
 | Chip | Scope | Repos searched |
 |------|-------|----------------|
 | `Personal · n` | `mine` | repos owned by your account (`user:<login>`) |
-| `Both · n` | `all` | personal repos plus every organization |
-| `Orgs · n` | `orgs` | only repos owned by organizations you can reach, one search per org |
+| `Orgs · n` | `orgs` | repos owned by organizations you can reach, one search per org |
 
 Organizations are discovered from your memberships and from the orgs that own
-repos you can see, so a private membership still shows up. `m` cycles
-Personal → Both → Orgs. The choice sticks: it lives in
+repos you can see, so a private membership still shows up. `m` flips between
+Personal and Orgs. The choice sticks: it lives in
 `~/.local/state/omarchy/github-oma/state.json` and survives restarts.
 
 ## Repos
@@ -42,8 +41,7 @@ first, then by the freshest push, then by name, and clicking one opens it:
 
 The scope chips filter this list exactly as they filter issues and PRs:
 `Personal` is the repos your account owns, `Orgs` the ones owned by your
-organizations, and `Both` everything you can reach — including repos owned by
-other people that you collaborate on.
+organizations.
 
 Organization repos come from a per-organization query sorted by push recency
 and capped at 50 each: GitHub's gateway answers 502 on heavier repo queries.
@@ -106,7 +104,7 @@ omarchy plugin enable tenzin.github-oma
 | `j` / `k` | Move through the list (or the focused chip row) |
 | `Tab` / `Shift+Tab` | Cycle the sections: tabs → scope → list |
 | `1` / `2` / `3` | Issues / pull requests / repos |
-| `m` | Cycle the scope: Personal → Both → Orgs |
+| `m` | Flip the scope: Personal ⇄ Orgs |
 | `Enter` / `o` | Open the selection in the browser |
 | `g` / `G` | Jump to the top / bottom |
 | `r` | Refresh now |

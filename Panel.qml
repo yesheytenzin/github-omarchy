@@ -34,24 +34,21 @@ Panel {
   readonly property var counts: root.service ? root.service.counts : GithubModel.countsFor(GithubModel.emptyScopes())
   readonly property string scope: root.service ? root.service.scope : "mine"
   readonly property string tab: root.service ? root.service.tab : "issues"
-  readonly property bool withMine: scope !== "orgs"
-  readonly property bool withOrgs: scope !== "mine"
-  readonly property int shownIssues: (withMine ? counts.mine.issues : 0) + (withOrgs ? counts.orgs.issues : 0)
-  readonly property int shownPrs: (withMine ? counts.mine.prs : 0) + (withOrgs ? counts.orgs.prs : 0)
+  readonly property var scopeCounts: scope === "orgs" ? counts.orgs : counts.mine
+  readonly property int shownIssues: scopeCounts.issues
+  readonly property int shownPrs: scopeCounts.prs
 
-  // Personal, both, and organizations as one row of chips. "all" stays the
-  // stored value for the merged view so existing state files keep working.
+  // The two scopes as one row of chips. A state file written by an older
+  // build may still say "all"; the model clamps that to personal.
   readonly property var repoCounts: root.service
-    ? root.service.repoCounts : { mine: 0, orgs: 0, all: 0 }
+    ? root.service.repoCounts : { mine: 0, orgs: 0 }
   // The scope chips count what the current tab shows: items on the issue/PR
   // tabs, repositories on the repos tab.
   readonly property var scopeOptions: root.tab === "repos" ? [
     { value: "mine", label: "Personal · " + repoCounts.mine },
-    { value: "all", label: "Both · " + repoCounts.all },
     { value: "orgs", label: "Orgs · " + repoCounts.orgs }
   ] : [
     { value: "mine", label: "Personal · " + (counts.mine.issues + counts.mine.prs) },
-    { value: "all", label: "Both · " + (counts.mine.issues + counts.mine.prs + counts.orgs.issues + counts.orgs.prs) },
     { value: "orgs", label: "Orgs · " + (counts.orgs.issues + counts.orgs.prs) }
   ]
   readonly property int scopeCount: root.scopeOptions.length
@@ -129,8 +126,8 @@ Panel {
     root.scopeIndex = Math.max(0, root.scopeValues().indexOf(root.service.scope))
   }
 
-  // Chip order, and the values the chips carry. "all" is the merged view.
-  function scopeValues() { return ["mine", "all", "orgs"] }
+  // Chip order, and the values the chips carry.
+  function scopeValues() { return ["mine", "orgs"] }
 
   function tabValues() { return ["issues", "prs", "repos"] }
 
