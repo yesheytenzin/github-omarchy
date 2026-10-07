@@ -259,7 +259,7 @@ Deltas from the plan above, all verified on the live shell:
 | — | Failure payloads carry no `scopes`, so the model parses them as typed failures. Found live: without this, every failure rendered as "unreadable reply" instead of the fix |
 | — | The bar badge counts issues + PRs in the current scope, capped at `99+` |
 | — | Rows were trimmed to the minimum on request: title + repo (issues/PRs), repo name (repos). The chip/tone presentation, labels, timestamps, drafts, and review-decision fields went with them, so the payload carries only what the rows draw |
-| Scope toggle: `Personal` / `Personal + Orgs` | Two chips in the end: `Personal` and `Orgs` (a three-way version with a merged `Both` view shipped first and was dropped on request; a stale `all` in state.json clamps to personal) |
+| Scope toggle: `Personal` / `Personal + Orgs` | One **Orgs** toggle button beside the Repos tab (a two-chip row, and before that a merged `Both` view, came and went on request; a stale `all` in state.json clamps to personal) |
 | — | A third tab, `Repos · n`: every reachable repo in per-owner buckets (mine / orgs / collaborator), starred-then-freshest first; org repos need their own per-org query because `viewer.repositories(ownerAffiliations: [ORGANIZATION_MEMBER])` hides them |
 | — | `.pragma library` JS and the mounted service survive a hot reload; changing them needs `omarchy-restart-shell` (documented in the README) |
 

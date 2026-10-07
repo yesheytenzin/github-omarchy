@@ -318,13 +318,6 @@ function repoMeta(repos, scope, fetchedAtSec, loading, nowMs) {
 }
 
 // The second line of a repo row: what is open there, and when it last moved.
-function repoCounts(repos) {
-  return {
-    mine: repoCountFor(repos, "mine"),
-    orgs: repoCountFor(repos, "orgs")
-  }
-}
-
 function reposTruncationHint(repos, scope) {
   var field = isObject(repos) ? repos : emptyRepoField()
   var bucket = clampScope(scope) === "orgs" ? (field.orgs || emptyRepoBucket()) : (field.mine || emptyRepoBucket())

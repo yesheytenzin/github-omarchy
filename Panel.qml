@@ -40,35 +40,24 @@ Panel {
 
   // The two scopes as one row of chips. A state file written by an older
   // build may still say "all"; the model clamps that to personal.
-  readonly property var repoCounts: root.service
-    ? root.service.repoCounts : { mine: 0, orgs: 0 }
-  // The scope chips count what the current tab shows: items on the issue/PR
-  // tabs, repositories on the repos tab.
-  readonly property var scopeOptions: root.tab === "repos" ? [
-    { value: "mine", label: "Personal · " + repoCounts.mine },
-    { value: "orgs", label: "Orgs · " + repoCounts.orgs }
-  ] : [
-    { value: "mine", label: "Personal · " + (counts.mine.issues + counts.mine.prs) },
-    { value: "orgs", label: "Orgs · " + (counts.orgs.issues + counts.orgs.prs) }
-  ]
-  readonly property int scopeCount: root.scopeOptions.length
-
-  // The tab row: the two involvement lists, then the repos view.
+  // The tab row: the two involvement lists, the repos view, and the scope
+  // toggle that sits beside them. The hero line carries the counts.
   readonly property var tabOptions: [
     { value: "issues", label: "Issues · " + root.shownIssues },
     { value: "prs", label: "Pull requests · " + root.shownPrs },
     { value: "repos", label: "Repos · " + (root.service ? root.service.repoCount : 0) }
   ]
-  readonly property int tabCount: root.tabOptions.length
+  // Cursor slots in that row: one per tab, plus the toggle.
+  readonly property int tabCount: root.tabOptions.length + 1
   readonly property var notice: root.service && root.service.errorKind !== ""
     ? GithubModel.errorNotice(root.service.errorKind, root.service.errorMessage) : null
   readonly property string truncation: root.service ? root.service.truncationHint : ""
 
-  // Keyboard cursor. "tabs" and "scope" hold a chip index, "list" holds a row
-  // index; Tab walks the three, j/k (and h/l) move inside the current one.
+  // Keyboard cursor. "tabs" holds a chip index — the three tabs and then the
+  // scope toggle — and "list" holds a row index; Tab walks the two, j/k (and
+  // h/l) move inside the current one.
   property string section: "list"
   property int tabIndex: 0
-  property int scopeIndex: 0
   property int listIndex: 0
 
   function clamp(value, low, high) { return Math.max(low, Math.min(high, value)) }
@@ -76,11 +65,7 @@ Panel {
   function syncIndexes() {
     if (!root.service) return
     root.tabIndex = Math.max(0, tabValues().indexOf(root.service.tab))
-    root.scopeIndex = Math.max(0, root.scopeValues().indexOf(root.service.scope))
   }
-
-  // Chip order, and the values the chips carry.
-  function scopeValues() { return ["mine", "orgs"] }
 
   function tabValues() { return ["issues", "prs", "repos"] }
 
@@ -88,15 +73,15 @@ Panel {
     var step = dy !== 0 ? dy : dx
     if (step === 0) return
     if (root.section === "tabs") root.tabIndex = clamp(root.tabIndex + step, 0, root.tabCount - 1)
-    else if (root.section === "scope") root.scopeIndex = clamp(root.scopeIndex + step, 0, root.scopeCount - 1)
     else if (root.rows.length > 0) root.listIndex = clamp(root.listIndex + step, 0, root.rows.length - 1)
   }
 
   function activate() {
     if (!root.service) return
-    if (root.section === "tabs") root.service.setTab(tabValues()[root.tabIndex])
-    else if (root.section === "scope") root.service.setScope(scopeValues()[root.scopeIndex])
-    else root.openSelection()
+    if (root.section !== "tabs") { root.openSelection(); return }
+    // The last slot in that row is the scope toggle, not a tab.
+    if (root.tabIndex >= root.tabOptions.length) root.service.toggleScope()
+    else root.service.setTab(tabValues()[root.tabIndex])
   }
 
   function openSelection() {
@@ -106,7 +91,7 @@ Panel {
   }
 
   function cycleSection(direction) {
-    var order = ["tabs", "scope", "list"]
+    var order = ["tabs", "list"]
     var index = Math.max(0, order.indexOf(root.section))
     root.section = order[(index + (direction < 0 ? order.length - 1 : 1)) % order.length]
   }
@@ -224,41 +209,47 @@ Panel {
           wrapMode: Text.WordWrap
         }
 
-        ButtonGroup {
-          options: root.tabOptions
-          value: root.service ? root.service.tab : "issues"
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          focusable: false
-          cursorIndex: root.section === "tabs" ? root.tabIndex : -1
-          onChanged: function(value) {
-            if (!root.service) return
-            root.service.setTab(value)
-            root.syncIndexes()
-          }
-          onHovered: function(index, isHovered) {
-            if (!isHovered) return
-            root.section = "tabs"
-            root.tabIndex = index
-          }
-        }
+        Row {
+          width: parent.width
+          spacing: Style.spacing.md
 
-        ButtonGroup {
-          options: root.scopeOptions
-          value: root.scope
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          focusable: false
-          cursorIndex: root.section === "scope" ? root.scopeIndex : -1
-          onChanged: function(value) {
-            if (!root.service) return
-            root.service.setScope(value)
-            root.syncIndexes()
+          ButtonGroup {
+            options: root.tabOptions
+            value: root.service ? root.service.tab : "issues"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            focusable: false
+            cursorIndex: root.section === "tabs" && root.tabIndex < root.tabOptions.length
+              ? root.tabIndex : -1
+            onChanged: function(value) {
+              if (!root.service) return
+              root.service.setTab(value)
+              root.syncIndexes()
+            }
+            onHovered: function(index, isHovered) {
+              if (!isHovered) return
+              root.section = "tabs"
+              root.tabIndex = index
+            }
           }
-          onHovered: function(index, isHovered) {
-            if (!isHovered) return
-            root.section = "scope"
-            root.scopeIndex = index
+
+          // Scope toggle: off is personal, on is organizations. The chips it
+          // replaced showed both counts at once; the hero line carries them now.
+          Button {
+            readonly property bool on: root.scope === "orgs"
+            text: "Orgs"
+            selected: on
+            hasCursor: root.section === "tabs" && root.tabIndex === root.tabOptions.length
+            bordered: true
+            tooltipText: "Organizations — off shows personal repos only"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: if (root.service) root.service.toggleScope()
+            onHovered: function(isHovered) {
+              if (!isHovered) return
+              root.section = "tabs"
+              root.tabIndex = root.tabOptions.length
+            }
           }
         }
 

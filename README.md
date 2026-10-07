@@ -20,15 +20,18 @@ it, you are assigned, you were mentioned, or your review was requested
 (`involves:@me`). The scope decides which repos are searched, and the panel's
 scope chips switch between all three:
 
-| Chip | Scope | Repos searched |
-|------|-------|----------------|
-| `Personal · n` | `mine` | repos owned by your account (`user:<login>`) |
-| `Orgs · n` | `orgs` | repos owned by organizations you can reach, one search per org |
+The **Orgs** toggle beside the tabs switches between the two scopes:
+
+| Toggle | Scope | Repos searched |
+|--------|-------|----------------|
+| off | `mine` | repos owned by your account (`user:<login>`) |
+| on | `orgs` | repos owned by organizations you can reach, one search per org |
 
 Organizations are discovered from your memberships and from the orgs that own
-repos you can see, so a private membership still shows up. `m` flips between
-Personal and Orgs. The choice sticks: it lives in
-`~/.local/state/omarchy/github-oma/state.json` and survives restarts.
+repos you can see, so a private membership still shows up. `m` flips the same
+toggle, and the choice sticks: it lives in
+`~/.local/state/omarchy/github-oma/state.json` and survives restarts. The hero
+line under the title always says what is in view and how much of it there is.
 
 ## Repos
 
@@ -36,9 +39,8 @@ The `Repos · n` tab lists repositories, not items: one row per repo, the
 `owner/name` alone, ordered starred first, then by the freshest push, then by
 name. Clicking a row opens it.
 
-The scope chips filter this list exactly as they filter issues and PRs:
-`Personal` is the repos your account owns, `Orgs` the ones owned by your
-organizations.
+The Orgs toggle filters this list exactly as it filters issues and PRs: off
+is the repos your account owns, on is the ones owned by your organizations.
 
 Organization repos come from a per-organization query sorted by push recency
 and capped at 50 each: GitHub's gateway answers 502 on heavier repo queries.
@@ -79,9 +81,9 @@ omarchy plugin enable tenzin.github-oma
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Move through the list (or the focused chip row) |
-| `Tab` / `Shift+Tab` | Cycle the sections: tabs → scope → list |
+| `Tab` / `Shift+Tab` | Cycle the sections: tabs (and the Orgs toggle) → list |
 | `1` / `2` / `3` | Issues / pull requests / repos |
-| `m` | Flip the scope: Personal ⇄ Orgs |
+| `m` | Flip the Orgs toggle |
 | `Enter` / `o` | Open the selection in the browser |
 | `g` / `G` | Jump to the top / bottom |
 | `r` | Refresh now |

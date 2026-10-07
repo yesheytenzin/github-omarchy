@@ -45,7 +45,6 @@ Item {
     ? GithubModel.reposFor(root.repos, root.scope)
     : GithubModel.itemsFor(scopes, scope, tab)
   readonly property int repoCount: GithubModel.repoCountFor(root.repos, root.scope)
-  readonly property var repoCounts: GithubModel.repoCounts(root.repos)
   readonly property int badgeCount: GithubModel.badgeCount(scopes, scope)
   readonly property int attentionCount: GithubModel.attentionCount(scopes, scope)
 
