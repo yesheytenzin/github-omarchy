@@ -68,6 +68,7 @@ fragment RepoParts on Repository {
 ISSUE_PARTS = """
 fragment IssueParts on Issue {
   number title url updatedAt
+  author { login }
   repository { nameWithOwner }
   assignees(first: 5) { nodes { login } }
 }
@@ -76,6 +77,7 @@ fragment IssueParts on Issue {
 PR_PARTS = """
 fragment PrParts on PullRequest {
   number title url updatedAt
+  author { login }
   repository { nameWithOwner }
   assignees(first: 5) { nodes { login } }
   reviewRequests(first: 5) { nodes { requestedReviewer { ... on User { login } } } }
@@ -240,6 +242,7 @@ def normalize_item(node: dict, kind: str, scope: str, login: str) -> dict:
         reviewer = request.get("requestedReviewer") or {}
         if isinstance(reviewer, dict) and reviewer.get("login"):
             reviewers.append(str(reviewer["login"]))
+    review_requested = login in reviewers
     return {
         "type": kind,
         "scope": scope,
@@ -248,9 +251,11 @@ def normalize_item(node: dict, kind: str, scope: str, login: str) -> dict:
         "url": str(node.get("url", "")),
         "repo": str((node.get("repository") or {}).get("nameWithOwner", "")),
         "updatedAt": str(node.get("updatedAt", "")),
-        # The one bit of state the UI still uses: the bar turns urgent when
-        # something is assigned to the viewer or waiting on their review.
-        "needsMe": login in assignees or login in reviewers,
+        # What the PR list ranks by: your own pull requests first, then the
+        # ones waiting on your review. needsMe still drives the bar colour.
+        "authored": str((node.get("author") or {}).get("login", "")) == login,
+        "reviewRequested": review_requested,
+        "needsMe": login in assignees or review_requested,
     }
 
 

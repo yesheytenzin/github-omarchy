@@ -41,6 +41,7 @@ QtObject {
       testCounts()
       testStrings()
       testScopes()
+      testPrOrder()
       testRepos()
       testNotices()
     } catch (error) {
@@ -91,8 +92,10 @@ QtObject {
             item("https://x/a", "2026-10-05T08:00:00Z", { number: 4, needsMe: true }),
             item("https://x/b", "2026-10-07T09:15:47Z", { number: 3 })
           ], true),
-          prs: field(1, [
-            item("https://x/c", "2026-08-03T04:57:25Z", { type: "pr", needsMe: true })
+          prs: field(3, [
+            item("https://x/c", "2026-08-03T04:57:25Z", { type: "pr", authored: true }),
+            item("https://x/f", "2026-08-20T10:00:00Z", { type: "pr", reviewRequested: true, needsMe: true }),
+            item("https://x/g", "2026-08-25T10:00:00Z", { type: "pr" })
           ], false)
         },
         orgs: {
@@ -167,9 +170,9 @@ QtObject {
     var scopes = parse(payload()).scopes
     var counts = Model.countsFor(scopes)
     expectEqual(counts.mine.issues, 3, "personal issue count")
-    expectEqual(counts.mine.prs, 1, "personal PR count")
+    expectEqual(counts.mine.prs, 3, "personal PR count")
     expectEqual(counts.orgs.issues, 4, "org issue count")
-    expectEqual(Model.badgeCount(scopes, "mine"), 4, "the bar badge counts personal items")
+    expectEqual(Model.badgeCount(scopes, "mine"), 6, "the bar badge counts personal items")
     expectEqual(Model.attentionCount(scopes, "mine"), 2, "attention counts assigned and review-requested")
     expectEqual(Model.badgeCount(Model.emptyScopes(), "mine"), 0, "empty scopes count zero")
     expectEqual(Model.badgeCount(scopes, "orgs"), 5, "the org scope counts org items")
@@ -213,7 +216,7 @@ QtObject {
     expectEqual(Model.itemsFor(scopes, "orgs", "prs").length, 1, "orgs-only lists org PRs too")
 
     expectEqual(Model.badgeCount(scopes, "orgs"), 5, "the orgs badge counts org items only")
-    expectEqual(Model.badgeCount(scopes, "mine"), 4, "the personal badge stays personal")
+    expectEqual(Model.badgeCount(scopes, "mine"), 6, "the personal badge stays personal")
     expectEqual(Model.attentionCount(scopes, "orgs"), 1, "attention follows the scope")
 
     contains(Model.updatedMeta(scopes, "orgs", 0, false, 0), "4 issues", "the orgs hero counts org issues")
@@ -281,6 +284,31 @@ QtObject {
 
     expectEqual(Model.reposTruncationHint(payload.repos, "orgs"), "Showing the most recent 2 of 30.", "a capped org bucket is explained")
     expectEqual(Model.reposTruncationHint(payload.repos, "mine"), "", "a complete personal bucket is not explained")
+  }
+
+  // ---- pull request order -------------------------------------------------
+
+  function testPrOrder() {
+    var scopes = parse(payload()).scopes
+
+    // Yours first, then the ones waiting on your review, then the rest — each
+    // group newest first, so the undated-to-me PR cannot jump the queue.
+    var prs = Model.itemsFor(scopes, "mine", "prs")
+    expectEqual(prs.length, 3, "all three personal PRs are listed")
+    expectEqual(prs[0].url, "https://x/c", "an authored PR leads even when it is the oldest")
+    expectEqual(prs[1].url, "https://x/f", "a requested review comes second")
+    expectEqual(prs[2].url, "https://x/g", "an involved-but-unasked PR comes last however fresh it is")
+
+    // Issues keep plain recency: no groups there.
+    var issues = Model.itemsFor(scopes, "mine", "issues")
+    expectEqual(issues[0].url, "https://x/b", "issues stay newest first")
+    expectEqual(issues[1].url, "https://x/a", "the older issue follows")
+
+    // An authored PR that is also waiting on a review is still group one.
+    var both = parse({ ok: true,
+      scopes: { mine: { issues: field(0, [], false), prs: field(1, [item("https://x/h", "2026-08-01T00:00:00Z", { type: "pr", authored: true, reviewRequested: true, needsMe: true })], false) },
+                orgs: { issues: field(0, [], false), prs: field(0, [], false) } } }).scopes
+    expectEqual(Model.itemsFor(both, "mine", "prs")[0].url, "https://x/h", "your own PR outranks your own review request")
   }
 
   function testNotices() {

@@ -120,6 +120,8 @@ function normalizeItem(raw) {
     repo: String(raw.repo || ""),
     updatedAt: String(raw.updatedAt || ""),
     updatedAtMs: Date.parse(String(raw.updatedAt || "")) || 0,
+    authored: raw.authored === true,
+    reviewRequested: raw.reviewRequested === true,
     needsMe: raw.needsMe === true
   }
 }
@@ -195,12 +197,27 @@ function serializeState(scope, tab) {
   return JSON.stringify({ scope: clampScope(scope), tab: clampTab(tab) }, null, 2) + "\n"
 }
 
-function sortedByUpdated(items) {
-  var copy = items.slice()
-  copy.sort(function(a, b) { return b.updatedAtMs - a.updatedAtMs })
-  return copy
+// Pull requests read in three groups — yours, then the ones waiting on your
+// review, then everything else that involves you — newest first inside each.
+// Issues stay in plain recency order.
+function prRank(item) {
+  if (item.authored) return 0
+  if (item.reviewRequested) return 1
+  return 2
 }
 
+function sortedForTab(items, tab) {
+  var copy = items.slice()
+  if (clampTab(tab) !== "prs") {
+    copy.sort(function(a, b) { return b.updatedAtMs - a.updatedAtMs })
+    return copy
+  }
+  copy.sort(function(a, b) {
+    var byGroup = prRank(a) - prRank(b)
+    return byGroup !== 0 ? byGroup : b.updatedAtMs - a.updatedAtMs
+  })
+  return copy
+}
 
 function fieldFor(scopes, scope, tab) {
   var source = isObject(scopes) ? scopes : emptyScopes()
@@ -209,7 +226,7 @@ function fieldFor(scopes, scope, tab) {
   var field = bucket && bucket[key] ? bucket[key] : emptyField()
   // The helper already sorts, but the panel must not depend on that: one
   // ordering rule here covers every scope.
-  return { count: field.count, items: sortedByUpdated(field.items), truncated: field.truncated }
+  return { count: field.count, items: sortedForTab(field.items, key), truncated: field.truncated }
 }
 
 function itemsFor(scopes, scope, tab) {

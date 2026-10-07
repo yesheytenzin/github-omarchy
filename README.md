@@ -9,9 +9,11 @@ third tab that browses the repos themselves.
            urgent when something is assigned to you or awaiting your review
 ```
 
-Click it and the panel lists what needs you, newest first: each row is the
-issue or pull request title with the repo it lives in underneath, and nothing
-else. `Enter` opens one in the browser.
+Click it and the panel lists what needs you: each row is the issue or pull
+request title with the repo it lives in underneath, and nothing else. Issues
+read newest first. Pull requests are grouped — the ones you wrote, then the
+ones waiting on your review, then the rest — newest first inside each group.
+`Enter` opens one in the browser.
 
 ## What counts as "mine"
 

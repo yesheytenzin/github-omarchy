@@ -49,9 +49,23 @@ PULL = {
     "title": "[NORMAL] Job Application",
     "url": "https://github.com/yesheytenzin/job_application_portal/pull/16",
     "updatedAt": "2026-08-03T04:57:25Z",
+    "author": {"login": "peer-dev"},
     "repository": {"nameWithOwner": "yesheytenzin/job_application_portal"},
     "assignees": {"nodes": []},
     "reviewRequests": {"nodes": [{"requestedReviewer": {"login": LOGIN}}]},
+}
+
+# Neither authored by the viewer nor waiting on their review, and yet the
+# newest of the three: it must still sort last.
+MENTIONED_PULL = {
+    "number": 20,
+    "title": "Release checklist",
+    "url": "https://github.com/yesheytenzin/job_application_portal/pull/20",
+    "updatedAt": "2026-08-10T09:00:00Z",
+    "author": {"login": "peer-dev"},
+    "repository": {"nameWithOwner": "yesheytenzin/job_application_portal"},
+    "assignees": {"nodes": []},
+    "reviewRequests": {"nodes": []},
 }
 
 APPROVED_PULL = {
@@ -59,6 +73,7 @@ APPROVED_PULL = {
     "title": "[NORMAL] Profile",
     "url": "https://github.com/yesheytenzin/job_application_portal/pull/12",
     "updatedAt": "2026-07-30T18:00:37Z",
+    "author": {"login": LOGIN},
     "repository": {"nameWithOwner": "yesheytenzin/job_application_portal"},
     "isDraft": False,
     "labels": {"nodes": [{"name": "ready", "color": "0e8a16"}]},
@@ -132,7 +147,7 @@ def graphql_payload() -> dict:
             "orgRepos0": {"repositories": ORG_REPOS},
             "orgRepos1": {"repositories": {"totalCount": 0, "pageInfo": {"hasNextPage": False}, "nodes": []}},
             "mineIssues": search(3, [ISSUE, SECOND_ISSUE]),
-            "minePrs": search(2, [PULL, APPROVED_PULL]),
+            "minePrs": search(3, [PULL, APPROVED_PULL, MENTIONED_PULL]),
             "orgIssues0": search(4, [ORG_ISSUE]),
             "orgPrs0": search(0, []),
             "orgIssues1": search(0, []),
