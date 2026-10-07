@@ -1,0 +1,369 @@
+#!/usr/bin/env python3
+"""GitHub data helper for the github-oma Omarchy plugin.
+
+Talks to GitHub only through the official `gh` CLI, which already holds the
+user's credentials, and prints one JSON document the service and panel share:
+
+    github-oma refresh [--json] [--max-age SECONDS]
+
+The document carries, for each scope ("mine" = repos owned by the viewer,
+"orgs" = repos owned by every organization they can reach), the open issues
+and open pull requests that involve the viewer (`involves:@me`: authored,
+assigned, mentioned, or review requested) — plus how many exist in total so
+the panel can say "showing 100 of 137".
+
+One GraphQL request per refresh carries one `search` field per (scope, type)
+pair, so a refresh costs a handful of search units and a single `gh` process.
+Successful payloads are cached in ~/.local/state/omarchy/github-oma/cache.json
+so the bar can paint before the network answers; --max-age returns that cache
+when it is still fresh, which keeps a panel open from double-fetching.
+
+Errors are payloads too, never tracebacks: {"ok": false, "error": kind} where
+kind is one of no-gh, no-auth, timeout, fetch-failed, parse-failed. The panel
+prints the fix for each.
+
+Environment overrides exist for the test suite: GITHUB_OMA_GH points at a fake
+gh, GITHUB_OMA_STATE_DIR redirects the cache.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+
+HOME = os.environ.get("HOME", os.path.expanduser("~"))
+STATE_DIR = os.environ.get("GITHUB_OMA_STATE_DIR", os.path.join(HOME, ".local", "state", "omarchy", "github-oma"))
+CACHE_PATH = os.path.join(STATE_DIR, "cache.json")
+GH = os.environ.get("GITHUB_OMA_GH", "gh")
+
+REQUEST_TIMEOUT = int(os.environ.get("GITHUB_OMA_TIMEOUT", "30"))  # seconds per gh call, so a hung network never hangs the shell
+ATTEMPTS = 3               # GitHub's gateway intermittently answers 502; retry those
+MAX_ITEMS = 100            # GitHub caps a search page at 100 nodes
+MAX_ORGS = 8               # one search field pair per org; keep the request bounded
+ORGS_MAX_AGE = 7 * 24 * 3600
+
+# Login and org names are interpolated into GraphQL query strings; anything
+# outside this shape is skipped rather than escaped.
+SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*$")
+
+ISSUE_PARTS = """
+fragment IssueParts on Issue {
+  number title url updatedAt
+  repository { nameWithOwner }
+  labels(first: 3) { nodes { name color } }
+  comments { totalCount }
+  assignees(first: 5) { nodes { login } }
+}
+"""
+
+PR_PARTS = """
+fragment PrParts on PullRequest {
+  number title url updatedAt isDraft reviewDecision
+  repository { nameWithOwner }
+  labels(first: 3) { nodes { name color } }
+  reviewRequests(first: 5) { nodes { requestedReviewer { ... on User { login } } } }
+}
+"""
+
+
+def log(message: str) -> None:
+    print(f"github-oma: {message}", file=sys.stderr)
+
+
+def now() -> int:
+    return int(time.time())
+
+
+def emit(payload: dict, code: int = 0) -> None:
+    print(json.dumps(payload, ensure_ascii=False))
+    sys.exit(code)
+
+
+def fail(error: str, message: str, code: int = 1) -> None:
+    emit({"ok": False, "error": error, "message": message}, code)
+
+
+def load_cache() -> dict | None:
+    try:
+        with open(CACHE_PATH, encoding="utf-8") as handle:
+            cached = json.load(handle)
+        return cached if isinstance(cached, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def save_cache(payload: dict) -> None:
+    os.makedirs(STATE_DIR, exist_ok=True)
+    temp = CACHE_PATH + ".tmp"
+    try:
+        with open(temp, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False)
+        os.replace(temp, CACHE_PATH)
+    except OSError as error:
+        log(f"could not write the cache: {error}")
+
+
+def run_gh(args: list[str], timeout: int = REQUEST_TIMEOUT) -> tuple[bool, str, str]:
+    try:
+        result = subprocess.run(
+            [GH, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "", "timeout"
+    except OSError as error:
+        return False, "", str(error)
+    return result.returncode == 0, result.stdout, result.stderr
+
+
+def classify_failure(stderr: str, stdout: str) -> tuple[str, str]:
+    text = (stderr or "") + (stdout or "")
+    if "timeout" in text.lower():
+        return "timeout", "GitHub took too long to answer. Press r to retry."
+    if "gh auth login" in text or "authentication" in text.lower() or "401" in text:
+        return "no-auth", "Not signed in to GitHub. Run: gh auth login"
+    return "fetch-failed", "Could not reach GitHub. Press r to retry."
+
+
+def discover_login() -> tuple[str, str]:
+    ok, out, err = run_gh(["api", "user", "--jq", ".login"])
+    if ok and out.strip():
+        return out.strip().splitlines()[-1].strip(), ""
+    kind, message = classify_failure(err, out)
+    return "", f"{kind}:{message}"
+
+
+def discover_orgs() -> list[str]:
+    """Org logins from memberships plus every org that owns a reachable repo.
+
+    The second call catches organizations whose membership is private, which
+    `user/orgs` alone does not list.
+    """
+    orgs: list[str] = []
+    for args in (
+        ["api", "user/orgs", "--jq", ".[].login"],
+        ["api", "user/repos?affiliation=organization_member&per_page=100", "--jq", "[.[].owner.login] | unique | .[]"],
+    ):
+        ok, out, _ = run_gh(args)
+        if not ok:
+            continue
+        for line in out.splitlines():
+            name = line.strip()
+            if name and SAFE_NAME.match(name) and name not in orgs:
+                orgs.append(name)
+    return orgs[:MAX_ORGS]
+
+
+def search_field(alias: str, query: str) -> str:
+    return (
+        f"{alias}: search(query: {json.dumps(query)}, type: ISSUE, first: {MAX_ITEMS})"
+        " { issueCount pageInfo { hasNextPage } nodes { ...IssueParts ...PrParts } }"
+    )
+
+
+def build_query(login: str, orgs: list[str]) -> str:
+    fields = [
+        search_field("mineIssues", f"is:issue is:open involves:@me user:{login} sort:updated-desc"),
+        search_field("minePrs", f"is:pr is:open involves:@me user:{login} sort:updated-desc"),
+    ]
+    for index, org in enumerate(orgs):
+        fields.append(search_field(f"orgIssues{index}", f"is:issue is:open involves:@me org:{org} sort:updated-desc"))
+        fields.append(search_field(f"orgPrs{index}", f"is:pr is:open involves:@me org:{org} sort:updated-desc"))
+    return "query {\n" + "\n".join(fields) + "\n}\n" + ISSUE_PARTS + PR_PARTS
+
+
+def nodes_of(value) -> list:
+    """The nodes of a GraphQL connection, or nothing if the shape is off.
+
+    GitHub omits nullable connections and the schema moves; a surprise here
+    must degrade to an unlabelled row, not a traceback that blanks the panel.
+    """
+    if isinstance(value, dict):
+        nodes = value.get("nodes")
+        if isinstance(nodes, list):
+            return [node for node in nodes if isinstance(node, dict)]
+    return []
+
+
+def total_count(value) -> int:
+    if isinstance(value, dict):
+        try:
+            return int(value.get("totalCount", 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+    return 0
+
+
+def normalize_item(node: dict, kind: str, scope: str, login: str) -> dict:
+    labels = [
+        {"name": str(label.get("name", "")), "color": str(label.get("color", ""))}
+        for label in nodes_of(node.get("labels"))[:3]
+    ]
+    assignees = [str(user.get("login", "")) for user in nodes_of(node.get("assignees"))]
+    reviewers = []
+    for request in nodes_of(node.get("reviewRequests")):
+        reviewer = request.get("requestedReviewer") or {}
+        if isinstance(reviewer, dict) and reviewer.get("login"):
+            reviewers.append(str(reviewer["login"]))
+    return {
+        "type": kind,
+        "scope": scope,
+        "number": int(node.get("number", 0)),
+        "title": str(node.get("title", "")),
+        "url": str(node.get("url", "")),
+        "repo": str((node.get("repository") or {}).get("nameWithOwner", "")),
+        "updatedAt": str(node.get("updatedAt", "")),
+        "draft": node.get("isDraft") is True,
+        "reviewDecision": str(node.get("reviewDecision") or ""),
+        "labels": labels,
+        "comments": total_count(node.get("comments")),
+        "assignees": assignees,
+        "reviewers": reviewers,
+        "needsMe": login in assignees or login in reviewers,
+    }
+
+
+def parse_search(field: dict | None, kind: str, scope: str, login: str) -> dict:
+    if not isinstance(field, dict):
+        return {"count": 0, "items": [], "truncated": False}
+    items = [
+        normalize_item(node, kind, scope, login)
+        for node in nodes_of(field)
+        if node.get("number") is not None
+    ]
+    # The search already sorts by updated-desc; sorting again keeps the panel
+    # honest when a merged org list concatenates orgs out of order.
+    items.sort(key=lambda item: item["updatedAt"], reverse=True)
+    count = int(field.get("issueCount", len(items)) or 0)
+    truncated = count > len(items) or bool((field.get("pageInfo") or {}).get("hasNextPage"))
+    return {"count": count, "items": items, "truncated": truncated}
+
+
+def fetch_payload(cached: dict | None) -> dict:
+    gh_path = shutil.which(GH)
+    if gh_path is None or not os.access(gh_path, os.X_OK):
+        fail(
+            "no-gh",
+            "The GitHub CLI (gh) is not installed. Run: sudo pacman -S github-cli",
+        )
+
+    login = ""
+    if cached:
+        login = str(cached.get("login", ""))
+    if not login:
+        login, error = discover_login()
+        if error:
+            kind, _, message = error.partition(":")
+            fail(kind, message)
+
+    orgs: list[str] = []
+    orgs_fetched_at = 0
+    if cached:
+        orgs = [name for name in cached.get("orgs", []) if isinstance(name, str)]
+        orgs_fetched_at = int(cached.get("orgsFetchedAt", 0))
+    if not orgs or now() - orgs_fetched_at > ORGS_MAX_AGE:
+        discovered = discover_orgs()
+        if discovered:
+            orgs, orgs_fetched_at = discovered, now()
+        elif not orgs:
+            orgs_fetched_at = orgs_fetched_at or now()
+
+    query = build_query(login, orgs)
+
+    data = None
+    failure = ("fetch-failed", "Could not reach GitHub. Press r to retry.")
+    for attempt in range(ATTEMPTS):
+        ok, out, err = run_gh(["api", "graphql", "-f", f"query={query}"])
+        if ok and '"data"' in out:
+            try:
+                data = json.loads(out[out.index("{"):]).get("data")
+            except ValueError:
+                data = None
+            if data:
+                break
+        failure = classify_failure(err, out)
+        if failure[0] == "no-auth":
+            break
+        time.sleep(1 + attempt)
+
+    if not data:
+        fail(failure[0], failure[1])
+
+    scopes = {
+        "mine": {
+            "issues": parse_search(data.get("mineIssues"), "issue", "mine", login),
+            "prs": parse_search(data.get("minePrs"), "pr", "mine", login),
+        },
+        "orgs": {
+            "issues": {"count": 0, "items": [], "truncated": False},
+            "prs": {"count": 0, "items": [], "truncated": False},
+        },
+    }
+    for index in range(len(orgs)):
+        for alias, kind, key in ((f"orgIssues{index}", "issue", "issues"), (f"orgPrs{index}", "pr", "prs")):
+            parsed = parse_search(data.get(alias), kind, "orgs", login)
+            bucket = scopes["orgs"][key]
+            bucket["count"] += parsed["count"]
+            bucket["items"].extend(parsed["items"])
+            bucket["truncated"] = bucket["truncated"] or parsed["truncated"]
+    for key in ("issues", "prs"):
+        scopes["orgs"][key]["items"].sort(key=lambda item: item["updatedAt"], reverse=True)
+
+    return {
+        "ok": True,
+        "cached": False,
+        "fetchedAt": now(),
+        "login": login,
+        "orgs": orgs,
+        "orgsFetchedAt": orgs_fetched_at,
+        "scopes": scopes,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="github-oma",
+        description="Fetch the viewer's open issues and pull requests for the Omarchy GitHub panel.",
+    )
+    parser.add_argument("command", nargs="?", default="refresh", choices=["refresh", "scopes"], help="refresh (default) or scopes")
+    parser.add_argument("--json", action="store_true", help="print JSON (always on; kept for explicit callers)")
+    parser.add_argument("--max-age", type=int, default=0, metavar="SECONDS",
+                        help="return the cache when it is at most this old, without touching the network")
+    args = parser.parse_args()
+
+    os.makedirs(STATE_DIR, exist_ok=True)
+
+    if args.command == "scopes":
+        cached = load_cache() or {}
+        login = str(cached.get("login", "")) or (discover_login()[0] if shutil.which(GH) else "")
+        orgs = [name for name in cached.get("orgs", []) if isinstance(name, str)] or discover_orgs()
+        emit({"ok": True, "login": login, "orgs": orgs, "fetchedAt": int(cached.get("fetchedAt", 0))})
+
+    cached = load_cache()
+    if args.max_age > 0 and cached and cached.get("ok") and now() - int(cached.get("fetchedAt", 0)) <= args.max_age:
+        result = dict(cached)
+        result["cached"] = True
+        emit(result)
+
+    payload = fetch_payload(cached)
+    save_cache(payload)
+    emit(payload)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        fail("fetch-failed", "Cancelled.")
+    except Exception:  # noqa: BLE001 - a typed payload beats a bare traceback
+        import traceback
+        traceback.print_exc()
+        fail("fetch-failed", "The helper hit an unexpected error. Run it by hand to see why.")
