@@ -32,8 +32,6 @@ ISSUE = {
     "url": "https://github.com/yesheytenzin/auto-workspace/issues/3",
     "updatedAt": "2026-10-07T09:15:47Z",
     "repository": {"nameWithOwner": "yesheytenzin/auto-workspace"},
-    "labels": {"nodes": [{"name": "bug", "color": "d73a4a"}]},
-    "comments": {"totalCount": 1},
     "assignees": {"nodes": [{"login": LOGIN}]},
 }
 
@@ -43,8 +41,6 @@ SECOND_ISSUE = {
     "url": "https://github.com/yesheytenzin/auto-workspace/issues/4",
     "updatedAt": "2026-10-05T08:00:00Z",
     "repository": {"nameWithOwner": "yesheytenzin/auto-workspace"},
-    "labels": {"nodes": [{"name": "chore", "color": "fbca04"}, {"name": "ops", "color": "0e8a16"}]},
-    "comments": {"totalCount": 0},
     "assignees": {"nodes": []},
 }
 
@@ -54,9 +50,6 @@ PULL = {
     "url": "https://github.com/yesheytenzin/job_application_portal/pull/16",
     "updatedAt": "2026-08-03T04:57:25Z",
     "repository": {"nameWithOwner": "yesheytenzin/job_application_portal"},
-    "isDraft": False,
-    "reviewDecision": "REVIEW_REQUIRED",
-    "labels": {"nodes": []},
     "assignees": {"nodes": []},
     "reviewRequests": {"nodes": [{"requestedReviewer": {"login": LOGIN}}]},
 }
@@ -68,7 +61,6 @@ APPROVED_PULL = {
     "updatedAt": "2026-07-30T18:00:37Z",
     "repository": {"nameWithOwner": "yesheytenzin/job_application_portal"},
     "isDraft": False,
-    "reviewDecision": "APPROVED",
     "labels": {"nodes": [{"name": "ready", "color": "0e8a16"}]},
     "assignees": {"nodes": [{"login": LOGIN}]},
     "reviewRequests": {"nodes": []},
@@ -80,8 +72,6 @@ ORG_ISSUE = {
     "url": "https://github.com/acme-corp/widgets/issues/149",
     "updatedAt": "2026-09-30T10:00:00Z",
     "repository": {"nameWithOwner": "acme-corp/widgets"},
-    "labels": {"nodes": [{"name": "uat", "color": "5319e7"}]},
-    "comments": {"totalCount": 4},
     "assignees": {"nodes": [{"login": LOGIN}]},
 }
 
@@ -92,8 +82,6 @@ ORG_PULL = {
     "updatedAt": "2026-10-01T12:00:00Z",
     "repository": {"nameWithOwner": "OtherOrg/enrollment"},
     "isDraft": True,
-    "reviewDecision": "",
-    "labels": {"nodes": [{"name": "release", "color": "1d76db"}]},
     "assignees": {"nodes": []},
     "reviewRequests": {"nodes": []},
 }
@@ -103,18 +91,13 @@ def search(count: int, nodes: list) -> dict:
     return {"issueCount": count, "pageInfo": {"hasNextPage": False}, "nodes": nodes}
 
 
-def repo(name, pushed, open_issues, open_prs, owner_type, owner, starred=False, private=False, archived=False, stars=0):
+def repo(name, pushed, owner_type, owner, starred=False):
     return {
         "nameWithOwner": name,
         "url": "https://github.com/" + name,
-        "isPrivate": private,
-        "isArchived": archived,
         "pushedAt": pushed,
-        "stargazerCount": stars,
         "viewerHasStarred": starred,
         "owner": {"login": owner, "__typename": owner_type},
-        "issues": {"totalCount": open_issues},
-        "pullRequests": {"totalCount": open_prs},
     }
 
 
@@ -124,8 +107,8 @@ VIEWER = {
         "totalCount": 2,
         "pageInfo": {"hasNextPage": False},
         "nodes": [
-            repo("yesheytenzin/auto-workspace", "2026-10-07T09:15:47Z", 1, 0, "User", "yesheytenzin", starred=True, private=True),
-            repo("yesheytenzin/job_application_portal", "2026-08-03T04:57:25Z", 0, 2, "User", "yesheytenzin"),
+            repo("yesheytenzin/auto-workspace", "2026-10-07T09:15:47Z", "User", "yesheytenzin", starred=True),
+            repo("yesheytenzin/job_application_portal", "2026-08-03T04:57:25Z", "User", "yesheytenzin"),
         ],
     },
 }
@@ -135,8 +118,8 @@ ORG_REPOS = {
     "totalCount": 2,
     "pageInfo": {"hasNextPage": False},
     "nodes": [
-        repo("acme-corp/widgets", "2026-10-06T10:00:00Z", 6, 16, "Organization", "acme-corp"),
-        repo("acme-corp/toolkit", "2026-09-20T08:00:00Z", 0, 1, "Organization", "acme-corp", archived=True, stars=3),
+        repo("acme-corp/widgets", "2026-10-06T10:00:00Z", "Organization", "acme-corp"),
+        repo("acme-corp/toolkit", "2026-09-20T08:00:00Z", "Organization", "acme-corp"),
     ],
 }
 

@@ -71,53 +71,6 @@ Panel {
   property int scopeIndex: 0
   property int listIndex: 0
 
-  // State colours. Green and yellow have no shell token, so they follow the
-  // theme's light/dark background rather than hard-coding one green that only
-  // reads on half the themes; red and the accent are already theme tokens.
-  readonly property bool lightTheme: {
-    var base = Color.background
-    return (0.299 * base.r + 0.587 * base.g + 0.114 * base.b) > 0.5
-  }
-  readonly property color successColor: root.lightTheme ? "#1a7f37" : "#3fb950"
-  readonly property color warningColor: root.lightTheme ? "#9a6700" : "#d29922"
-
-  function toneColor(tone) {
-    switch (String(tone || "")) {
-    case "urgent": return Color.urgent
-    case "warning": return root.warningColor
-    case "success": return root.successColor
-    case "accent": return Color.accent
-    default: return root.dim
-    }
-  }
-
-  // A small tinted pill: fill and border from the tone, label in the tone.
-  // Used for review state ("APPROVED", "NEEDS REVIEW") and for why a row is
-  // yours ("ASSIGNED", "YOUR REVIEW").
-  component ToneChip: BorderSurface {
-    id: chip
-    property string label: ""
-    property color tone: root.dim
-
-    implicitWidth: chipLabel.implicitWidth + Style.spacing.sm * 2
-    implicitHeight: chipLabel.implicitHeight + Style.spacing.xxs * 2
-    radius: Style.cornerRadius
-    color: Qt.rgba(chip.tone.r, chip.tone.g, chip.tone.b, 0.15)
-    borderSpec: Border.controlSpec("normal", chip.tone, chip.tone)
-
-    Text {
-      id: chipLabel
-      anchors.centerIn: parent
-      textFormat: Text.PlainText
-      text: chip.label
-      color: chip.tone
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      font.bold: true
-      font.letterSpacing: 0.6
-    }
-  }
-
   function clamp(value, low, high) { return Math.max(low, Math.min(high, value)) }
 
   function syncIndexes() {
@@ -337,9 +290,6 @@ Panel {
 
             readonly property var item: rowSurface.modelData
             readonly property bool isRepo: rowSurface.item.kind === "repo"
-            readonly property string timeText: GithubModel.relativeTime(
-              rowSurface.isRepo ? rowSurface.item.pushedAtMs : rowSurface.item.updatedAtMs,
-              root.service ? root.service.nowMs : Date.now())
 
             width: issueList.width
             height: rowColumn.implicitHeight + Style.spacing.sm * 2
@@ -370,166 +320,38 @@ Panel {
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.spacing.xxs
 
-              // ---- issue / pull request rows ----------------------------------
-
-              RowLayout {
+              // An issue or pull request: its title, then the repo it is in.
+              Text {
                 width: parent.width
                 visible: !rowSurface.isRepo
-                spacing: Style.spacing.sm
-
-                Text {
-                  textFormat: Text.PlainText
-                  // nf-md-alert_circle_outline / nf-md-source_pull, coloured by
-                  // the row's worst state so the glyph column reads as a column
-                  // of states.
-                  text: rowSurface.item.type === "pr" ? "󰓂" : "󰗖"
-                  color: root.toneColor(GithubModel.rowTone(rowSurface.item))
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  Layout.alignment: Qt.AlignVCenter
-                }
-
-                Text {
-                  Layout.fillWidth: true
-                  textFormat: Text.PlainText
-                  text: rowSurface.item.title
-                  color: root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.body
-                  elide: Text.ElideRight
-                  Layout.alignment: Qt.AlignVCenter
-                }
-
-                ToneChip {
-                  readonly property var state: GithubModel.stateChip(rowSurface.item)
-                  visible: state !== null
-                  label: state ? state.label : ""
-                  tone: state ? root.toneColor(state.tone) : root.dim
-                  Layout.alignment: Qt.AlignVCenter
-                }
-
-                Text {
-                  textFormat: Text.PlainText
-                  visible: rowSurface.timeText !== ""
-                  text: rowSurface.timeText
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  Layout.alignment: Qt.AlignVCenter
-                }
-              }
-
-              RowLayout {
-                width: parent.width
-                visible: !rowSurface.isRepo
-                spacing: Style.spacing.sm
-
-                Text {
-                  textFormat: Text.PlainText
-                  text: rowSurface.item.repo + "#" + rowSurface.item.number
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  elide: Text.ElideRight
-                  Layout.maximumWidth: parent.width * 0.45
-                }
-
-                Repeater {
-                  model: rowSurface.isRepo ? [] : rowSurface.item.labels
-
-                  Row {
-                    spacing: Style.spacing.xxs
-                    Rectangle {
-                      anchors.verticalCenter: parent.verticalCenter
-                      width: 7
-                      height: 7
-                      radius: 4
-                      color: GithubModel.labelRgba(modelData.color, 0.95)
-                    }
-                    Text {
-                      textFormat: Text.PlainText
-                      width: Math.min(implicitWidth, Style.space(90))
-                      text: modelData.name
-                      color: root.dim
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
-                      elide: Text.ElideRight
-                    }
-                  }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                ToneChip {
-                  readonly property var yours: GithubModel.youChip(rowSurface.item)
-                  visible: yours !== null
-                  label: yours ? yours.label : ""
-                  tone: yours ? root.toneColor(yours.tone) : root.dim
-                }
-              }
-
-              // ---- repo rows --------------------------------------------------
-
-              RowLayout {
-                width: parent.width
-                visible: rowSurface.isRepo
-                spacing: Style.spacing.sm
-
-                Text {
-                  textFormat: Text.PlainText
-                  // nf-md-star: a favourite marker, not a state.
-                  visible: rowSurface.item.starred === true
-                  text: "󰓎"
-                  color: root.toneColor("warning")
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  Layout.alignment: Qt.AlignVCenter
-                }
-
-                Text {
-                  Layout.fillWidth: true
-                  textFormat: Text.PlainText
-                  text: rowSurface.item.nameWithOwner
-                  color: rowSurface.item.archived === true ? root.dim : root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.body
-                  elide: Text.ElideRight
-                  Layout.alignment: Qt.AlignVCenter
-                }
-
-                ToneChip {
-                  visible: rowSurface.item.private === true
-                  label: "PRIVATE"
-                  tone: root.dim
-                  Layout.alignment: Qt.AlignVCenter
-                }
-
-                ToneChip {
-                  visible: rowSurface.item.archived === true
-                  label: "ARCHIVED"
-                  tone: root.toneColor("warning")
-                  Layout.alignment: Qt.AlignVCenter
-                }
-
-                Text {
-                  textFormat: Text.PlainText
-                  visible: rowSurface.timeText !== ""
-                  text: rowSurface.timeText
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  Layout.alignment: Qt.AlignVCenter
-                }
+                textFormat: Text.PlainText
+                text: rowSurface.item.title
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                elide: Text.ElideRight
               }
 
               Text {
                 width: parent.width
-                visible: rowSurface.isRepo
+                visible: !rowSurface.isRepo
                 textFormat: Text.PlainText
-                text: GithubModel.repoLine(rowSurface.item, root.service ? root.service.nowMs : Date.now())
+                text: rowSurface.item.repo
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
+                elide: Text.ElideRight
+              }
+
+              // A repo: the name alone.
+              Text {
+                width: parent.width
+                visible: rowSurface.isRepo
+                textFormat: Text.PlainText
+                text: rowSurface.item.nameWithOwner
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
                 elide: Text.ElideRight
               }
             }

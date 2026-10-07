@@ -57,14 +57,9 @@ function normalizeRepo(raw) {
     nameWithOwner: name !== "" ? name : url,
     url: url !== "" ? url : "https://github.com/" + name,
     scope: raw.scope === "orgs" ? "orgs" : "mine",
-    private: raw.private === true,
-    archived: raw.archived === true,
     pushedAt: String(raw.pushedAt || ""),
     pushedAtMs: Date.parse(String(raw.pushedAt || "")) || 0,
-    stars: Number(raw.stars || 0),
-    starred: raw.starred === true,
-    openIssues: Number(raw.openIssues || 0),
-    openPRs: Number(raw.openPRs || 0)
+    starred: raw.starred === true
   }
 }
 
@@ -116,15 +111,6 @@ function normalizeField(raw) {
 
 function normalizeItem(raw) {
   if (!isObject(raw) || typeof raw.url !== "string" || raw.url === "") return null
-  var labels = []
-  if (Array.isArray(raw.labels)) {
-    for (var i = 0; i < raw.labels.length && labels.length < 3; i++) {
-      var label = raw.labels[i]
-      if (isObject(label) && String(label.name || "") !== "") {
-        labels.push({ name: String(label.name), color: String(label.color || "") })
-      }
-    }
-  }
   return {
     type: raw.type === "pr" ? "pr" : "issue",
     scope: raw.scope === "orgs" ? "orgs" : "mine",
@@ -134,73 +120,8 @@ function normalizeItem(raw) {
     repo: String(raw.repo || ""),
     updatedAt: String(raw.updatedAt || ""),
     updatedAtMs: Date.parse(String(raw.updatedAt || "")) || 0,
-    draft: raw.draft === true,
-    reviewDecision: String(raw.reviewDecision || ""),
-    labels: labels,
-    comments: Number(raw.comments || 0),
-    assigned: raw.assigned === true,
-    reviewRequested: raw.reviewRequested === true,
-    needsMe: raw.needsMe === true || raw.assigned === true || raw.reviewRequested === true
+    needsMe: raw.needsMe === true
   }
-}
-
-// ---- state colouring ------------------------------------------------------
-//
-// Tones, worst first. The panel maps a tone to one theme-aware colour (and
-// tints the chip from it); keeping the names here means the rules are
-// testable without a running shell.
-//
-//   urgent   something is wrong or waiting on you hard (red)
-//   warning  a review has to happen before it can move (yellow)
-//   success  approved and moving (green)
-//   accent   yours, but not blocked (the theme accent)
-//   dim      parked: drafts, and rows with nothing to say
-
-var TONES = ["dim", "accent", "success", "warning", "urgent"]
-
-function toneRank(tone) {
-  var index = TONES.indexOf(String(tone || ""))
-  return index < 0 ? 0 : index
-}
-
-function worseTone(a, b) {
-  return toneRank(a) >= toneRank(b) ? a : b
-}
-
-// The review state of a pull request: what the PR is waiting for.
-function stateChip(item) {
-  if (!item || item.type !== "pr") return null
-  if (item.draft) return { label: "DRAFT", tone: "dim" }
-  switch (item.reviewDecision) {
-  case "APPROVED":
-    return { label: "APPROVED", tone: "success" }
-  case "CHANGES_REQUESTED":
-    return { label: "CHANGES REQUESTED", tone: "urgent" }
-  case "REVIEW_REQUIRED":
-    return { label: "NEEDS REVIEW", tone: "warning" }
-  default:
-    return null
-  }
-}
-
-// Why this row is yours: your review is the blocking one, or it is assigned
-// to you. Shown on every row that has one, issues included.
-function youChip(item) {
-  if (!item) return null
-  if (item.reviewRequested) return { label: "YOUR REVIEW", tone: "urgent" }
-  if (item.assigned) return { label: "ASSIGNED", tone: "accent" }
-  return null
-}
-
-// One tone for the row as a whole, used to colour the type glyph so a scan
-// down the left edge reads the states without reading the chips.
-function rowTone(item) {
-  var tone = "dim"
-  var state = stateChip(item)
-  var you = youChip(item)
-  if (state) tone = worseTone(tone, state.tone)
-  if (you) tone = worseTone(tone, you.tone)
-  return tone
 }
 
 // The whole payload or null. Anything unexpected is rejected rather than
@@ -397,19 +318,6 @@ function repoMeta(repos, scope, fetchedAtSec, loading, nowMs) {
 }
 
 // The second line of a repo row: what is open there, and when it last moved.
-function repoLine(repo, nowMs) {
-  if (!isObject(repo)) return ""
-  var parts = [
-    plural(Number(repo.openIssues || 0), "open issue", "open issues"),
-    plural(Number(repo.openPRs || 0), "open pull request", "open pull requests")
-  ]
-  var pushed = relativeTime(Number(repo.pushedAtMs || 0), nowMs)
-  if (pushed !== "") {
-    parts.push(pushed === "now" ? "pushed just now" : "pushed " + pushed + " ago")
-  }
-  return parts.join(" · ")
-}
-
 function repoCounts(repos) {
   return {
     mine: repoCountFor(repos, "mine"),
@@ -444,17 +352,6 @@ function relativeTime(ms, nowMs) {
 // GitHub ships label colors as bare hex; the row draws a dot in that color
 // and keeps the theme's foreground for text, so a label can never make a
 // row unreadable on a theme whose accent contrasts badly.
-function labelRgba(color, alpha) {
-  var hex = String(color || "").replace("#", "")
-  if (hex.length !== 6) return "rgba(128,128,128," + alpha + ")"
-  var r = parseInt(hex.slice(0, 2), 16)
-  var g = parseInt(hex.slice(2, 4), 16)
-  var b = parseInt(hex.slice(4, 6), 16)
-  if (isNaN(r) || isNaN(g) || isNaN(b)) return "rgba(128,128,128," + alpha + ")"
-  return "rgba(" + r + "," + g + "," + b + "," + alpha + ")"
-}
-
-// One notice line per failure kind: what happened, then the exact fix.
 function errorNotice(kind, message) {
   switch (String(kind || "")) {
   case "no-gh":

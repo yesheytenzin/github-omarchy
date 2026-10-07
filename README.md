@@ -9,10 +9,9 @@ third tab that browses the repos themselves.
            urgent when something is assigned to you or awaiting your review
 ```
 
-Click it and the panel lists what needs you, newest first: issue and PR titles,
-`owner/repo#number`, labels, draft/review state, how long ago each last moved,
-and a `→ you` marker on the rows that are actually waiting on you. `Enter`
-opens one in the browser.
+Click it and the panel lists what needs you, newest first: each row is the
+issue or pull request title with the repo it lives in underneath, and nothing
+else. `Enter` opens one in the browser.
 
 ## What counts as "mine"
 
@@ -33,11 +32,9 @@ Personal and Orgs. The choice sticks: it lives in
 
 ## Repos
 
-The `Repos · n` tab lists repositories, not items. Rows are ordered starred
-first, then by the freshest push, then by name, and clicking one opens it:
-
-- `nameWithOwner` with a `PRIVATE` or `ARCHIVED` chip when either applies
-- `open issues · open pull requests · pushed …` underneath
+The `Repos · n` tab lists repositories, not items: one row per repo, the
+`owner/name` alone, ordered starred first, then by the freshest push, then by
+name. Clicking a row opens it.
 
 The scope chips filter this list exactly as they filter issues and PRs:
 `Personal` is the repos your account owns, `Orgs` the ones owned by your
@@ -47,26 +44,6 @@ Organization repos come from a per-organization query sorted by push recency
 and capped at 50 each: GitHub's gateway answers 502 on heavier repo queries.
 When that cap bites, the panel says "showing the most recent 50 of 262" and
 the chip still shows the true total.
-
-## States and colours
-
-Each row carries the state that decides what happens next, and why it is
-yours, as tinted chips:
-
-| Chip | Colour | Meaning |
-|------|--------|---------|
-| `APPROVED` | green | the pull request is approved |
-| `CHANGES REQUESTED` | red | a reviewer asked for changes |
-| `NEEDS REVIEW` | yellow | waiting on a review before it can move |
-| `DRAFT` | grey | still a draft |
-| `YOUR REVIEW` | red | your review is the one being waited on |
-| `ASSIGNED` | accent | assigned to you |
-
-The issue/PR glyph at the left of every row takes the colour of its worst
-state, so one scan down that column reads the whole list; the row itself is
-also tinted while the keyboard cursor is on it. Green and yellow are picked
-for the active theme's light or dark background, since the shell has no
-token for either; red, grey, and the accent come from the theme.
 
 ## Requirements
 

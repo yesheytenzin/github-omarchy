@@ -40,11 +40,9 @@ QtObject {
       testState()
       testCounts()
       testStrings()
-      testLabels()
       testScopes()
       testRepos()
       testNotices()
-      testChips()
     } catch (error) {
       // A throw would otherwise leave qml6 running with nothing to exit it.
       failures++
@@ -69,7 +67,6 @@ QtObject {
       url: url,
       repo: "yesheytenzin/auto-workspace",
       updatedAt: updatedAt,
-      labels: [],
       assignees: [],
       reviewers: [],
       needsMe: false
@@ -95,7 +92,7 @@ QtObject {
             item("https://x/b", "2026-10-07T09:15:47Z", { number: 3 })
           ], true),
           prs: field(1, [
-            item("https://x/c", "2026-08-03T04:57:25Z", { type: "pr", needsMe: true, draft: true, reviewDecision: "REVIEW_REQUIRED" })
+            item("https://x/c", "2026-08-03T04:57:25Z", { type: "pr", needsMe: true })
           ], false)
         },
         orgs: {
@@ -120,7 +117,6 @@ QtObject {
     expectEqual(parsed.login, "yesheytenzin", "login survives")
     expectEqual(parsed.scopes.mine.issues.items.length, 2, "items survive")
     expectEqual(parsed.scopes.mine.issues.items[0].updatedAtMs > 0, "true", "timestamps become numbers")
-    expectEqual(parsed.scopes.mine.prs.items[0].draft, "true", "draft survives")
     expectEqual(parsed.scopes.orgs.prs.items[0].scope, "orgs", "org scope survives")
 
     // An item without a URL cannot be opened, so it is dropped rather than
@@ -201,15 +197,6 @@ QtObject {
     expectEqual(Model.relativeTime(0, now), "", "an unknown time is blank")
   }
 
-  function testLabels() {
-    expectEqual(Model.labelRgba("d73a4a", 0.95), "rgba(215,58,74,0.95)", "hex colors become rgba")
-    expectEqual(Model.labelRgba("#00ff00", 1), "rgba(0,255,0,1)", "a leading hash is fine")
-    expectEqual(Model.labelRgba("", 0.5), "rgba(128,128,128,0.5)", "a missing color falls back to grey")
-    expectEqual(Model.labelRgba("zzzzzz", 0.5), "rgba(128,128,128,0.5)", "a broken color falls back to grey")
-  }
-
-  // ---- scopes -------------------------------------------------------------
-
   function testScopes() {
     var scopes = parse(payload()).scopes
 
@@ -246,15 +233,15 @@ QtObject {
     return {
       mine: repoBucket(2, [
         { kind: "repo", nameWithOwner: "yesheytenzin/job_application_portal", url: "https://x/p",
-          pushedAt: "2026-08-03T04:57:25Z", openIssues: 0, openPRs: 2 },
+          pushedAt: "2026-08-03T04:57:25Z" },
         { kind: "repo", nameWithOwner: "yesheytenzin/auto-workspace", url: "https://x/a",
-          pushedAt: "2026-10-07T09:15:47Z", openIssues: 1, openPRs: 0, starred: true, private: true }
+          pushedAt: "2026-10-07T09:15:47Z", starred: true }
       ]),
       orgs: repoBucket(30, [
         { kind: "repo", nameWithOwner: "acme-corp/widgets", url: "https://x/l",
-          pushedAt: "2026-10-06T10:00:00Z", openIssues: 6, openPRs: 16 },
+          pushedAt: "2026-10-06T10:00:00Z" },
         { kind: "repo", nameWithOwner: "acme-corp/toolkit", url: "https://x/b",
-          pushedAt: "2026-09-20T08:00:00Z", archived: true, stars: 3 }
+          pushedAt: "2026-09-20T08:00:00Z" }
       ], true)
     }
   }
@@ -273,7 +260,6 @@ QtObject {
     expectEqual(payload.repos.mine.items.length, 2, "own repos survive parsing")
     expectEqual(payload.repos.orgs.count, 30, "the org bucket keeps its total")
     expectEqual(payload.repos.orgs.items[0].scope, "orgs", "the bucket stamps the row's scope")
-    expectEqual(payload.repos.orgs.items[1].archived, "true", "the archive flag survives")
 
     expectEqual(Model.reposFor(payload.repos, "mine").length, 2, "personal shows the repos you own")
     expectEqual(Model.reposFor(payload.repos, "orgs")[0].nameWithOwner, "acme-corp/widgets", "orgs shows org repos")
@@ -293,11 +279,6 @@ QtObject {
     contains(Model.repoMeta(payload.repos, "orgs", 0, true, 0), "refreshing", "the repos hero says when it is fetching")
     contains(Model.repoMeta(payload.repos, "orgs", 1791365239, false, 1791365239 * 1000 + 60000), "updated 1m ago", "the repos hero ages the refresh")
 
-    var owned = Model.reposFor(payload.repos, "mine")[0]
-    contains(Model.repoLine(owned, owned.pushedAtMs), "1 open issue ·", "an issue count reads singular")
-    expectEqual(Model.repoLine(owned, owned.pushedAtMs), "1 open issue · 0 open pull requests · pushed just now", "a fresh push does not say 'now ago'")
-    expectEqual(Model.repoLine(owned, owned.pushedAtMs + 11 * 60 * 1000), "1 open issue · 0 open pull requests · pushed 11m ago", "a repo row ages its last push")
-
     expectEqual(Model.reposTruncationHint(payload.repos, "orgs"), "Showing the most recent 2 of 30.", "a capped org bucket is explained")
     expectEqual(Model.reposTruncationHint(payload.repos, "mine"), "", "a complete personal bucket is not explained")
   }
@@ -310,57 +291,4 @@ QtObject {
     expectEqual(Model.errorNotice("mystery", "the helper exploded").title, "the helper exploded", "an unknown kind shows the message")
   }
 
-  // ---- state chips --------------------------------------------------------
-
-  function pr(extras) {
-    var entry = item("https://x/pull", "2026-10-05T08:00:00Z", { type: "pr" })
-    for (var key in (extras || {})) entry[key] = extras[key]
-    return entry
-  }
-
-  function testChips() {
-    // The flags the helper sends have to survive parsing first: a chip can
-    // only say "assigned" if the row still knows it was.
-    var parsed = parse({
-      ok: true,
-      scopes: {
-        mine: {
-          issues: field(1, [item("https://x/a", "2026-10-05T08:00:00Z", { assigned: true })], false),
-          prs: field(1, [item("https://x/p", "2026-10-05T08:00:00Z", { type: "pr", assigned: true })], false)
-        },
-        orgs: { issues: field(0, [], false), prs: field(0, [], false) }
-      }
-    })
-    expectEqual(parsed.scopes.mine.issues.items[0].assigned, "true", "an assignment survives parsing")
-    expectEqual(parsed.scopes.mine.issues.items[0].needsMe, "true", "an assignment counts as yours")
-    expectEqual(parsed.scopes.mine.prs.items[0].reviewRequested, "false", "a missing review flag stays false")
-
-    // Pull request state.
-    expectEqual(Model.stateChip(pr({ draft: true })).label, "DRAFT", "a draft says so")
-    expectEqual(Model.stateChip(pr({ draft: true })).tone, "dim", "a draft is dim")
-    expectEqual(Model.stateChip(pr({ reviewDecision: "APPROVED" })).tone, "success", "approved is success")
-    expectEqual(Model.stateChip(pr({ reviewDecision: "CHANGES_REQUESTED" })).tone, "urgent", "changes requested is urgent")
-    expectEqual(Model.stateChip(pr({ reviewDecision: "CHANGES_REQUESTED" })).label, "CHANGES REQUESTED", "changes requested reads in full")
-    expectEqual(Model.stateChip(pr({ reviewDecision: "REVIEW_REQUIRED" })).tone, "warning", "needs review is a warning")
-    expectEqual(Model.stateChip(pr({ reviewDecision: "REVIEW_REQUIRED" })).label, "NEEDS REVIEW", "needs review reads plainly")
-    expectEqual(Model.stateChip(pr({})), null, "a pull request with no decision has no state chip")
-    expectEqual(Model.stateChip(item("https://x/i", "2026-10-05T08:00:00Z")), null, "issues have no review state")
-
-    // Why the row is yours.
-    expectEqual(Model.youChip(item("https://x/i", "2026-10-05T08:00:00Z", { assigned: true })).label, "ASSIGNED", "an assigned row says so")
-    expectEqual(Model.youChip(item("https://x/i", "2026-10-05T08:00:00Z", { assigned: true })).tone, "accent", "an assignment is accent")
-    expectEqual(Model.youChip(pr({ reviewRequested: true })).tone, "urgent", "your review is urgent")
-    expectEqual(Model.youChip(pr({ reviewRequested: true, assigned: true })).label, "YOUR REVIEW", "your review outranks assigned")
-    expectEqual(Model.youChip(pr({})), null, "a row you only authored gets no chip")
-
-    // The row tone drives the type glyph's colour.
-    expectEqual(Model.rowTone(pr({ reviewDecision: "CHANGES_REQUESTED" })), "urgent", "changes requested colours the row")
-    expectEqual(Model.rowTone(pr({ reviewDecision: "REVIEW_REQUIRED" })), "warning", "needs review colours the row")
-    expectEqual(Model.rowTone(pr({ reviewDecision: "APPROVED" })), "success", "approved colours the row")
-    expectEqual(Model.rowTone(pr({ draft: true })), "dim", "a draft stays dim")
-    expectEqual(Model.rowTone(pr({ reviewRequested: true })), "urgent", "your review colours the row")
-    expectEqual(Model.rowTone(item("https://x/i", "2026-10-05T08:00:00Z", { assigned: true })), "accent", "assigned is accent")
-    expectEqual(Model.rowTone(item("https://x/i", "2026-10-05T08:00:00Z")), "dim", "a plain row takes no colour")
-    expectEqual(Model.rowTone(pr({ reviewDecision: "APPROVED", reviewRequested: true })), "urgent", "your review outranks approved")
-  }
 }

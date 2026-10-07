@@ -56,28 +56,27 @@ SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*$")
 
 REPO_PARTS = """
 fragment RepoParts on Repository {
-  nameWithOwner url isPrivate isArchived pushedAt stargazerCount viewerHasStarred
-  owner { login __typename }
-  issues(states: OPEN) { totalCount }
-  pullRequests(states: OPEN) { totalCount }
+  nameWithOwner url pushedAt viewerHasStarred
+  owner { login }
 }
 """
 
+# Only what the panel draws: a title, a repository, and enough to tell
+# whether the row is waiting on the viewer (the bar's urgency colour). Labels,
+# comment counts, and review state used to ride along for row chips; the list
+# is deliberately minimal now, so they are not fetched.
 ISSUE_PARTS = """
 fragment IssueParts on Issue {
   number title url updatedAt
   repository { nameWithOwner }
-  labels(first: 3) { nodes { name color } }
-  comments { totalCount }
   assignees(first: 5) { nodes { login } }
 }
 """
 
 PR_PARTS = """
 fragment PrParts on PullRequest {
-  number title url updatedAt isDraft reviewDecision
+  number title url updatedAt
   repository { nameWithOwner }
-  labels(first: 3) { nodes { name color } }
   assignees(first: 5) { nodes { login } }
   reviewRequests(first: 5) { nodes { requestedReviewer { ... on User { login } } } }
 }
@@ -235,10 +234,6 @@ def total_count(value) -> int:
 
 
 def normalize_item(node: dict, kind: str, scope: str, login: str) -> dict:
-    labels = [
-        {"name": str(label.get("name", "")), "color": str(label.get("color", ""))}
-        for label in nodes_of(node.get("labels"))[:3]
-    ]
     assignees = [str(user.get("login", "")) for user in nodes_of(node.get("assignees"))]
     reviewers = []
     for request in nodes_of(node.get("reviewRequests")):
@@ -253,16 +248,8 @@ def normalize_item(node: dict, kind: str, scope: str, login: str) -> dict:
         "url": str(node.get("url", "")),
         "repo": str((node.get("repository") or {}).get("nameWithOwner", "")),
         "updatedAt": str(node.get("updatedAt", "")),
-        "draft": node.get("isDraft") is True,
-        "reviewDecision": str(node.get("reviewDecision") or ""),
-        "labels": labels,
-        "comments": total_count(node.get("comments")),
-        "assignees": assignees,
-        "reviewers": reviewers,
-        # Split apart so the panel can colour "assigned to you" differently
-        # from "your review is requested"; the row treats either as yours.
-        "assigned": login in assignees,
-        "reviewRequested": login in reviewers,
+        # The one bit of state the UI still uses: the bar turns urgent when
+        # something is assigned to the viewer or waiting on their review.
         "needsMe": login in assignees or login in reviewers,
     }
 
@@ -288,19 +275,13 @@ def normalize_repo(node: dict, login: str) -> dict | None:
     if not name:
         return None
     owner = node.get("owner") or {}
-    scope = "mine" if str(owner.get("login", "")) == login else "orgs"
     return {
         "kind": "repo",
         "nameWithOwner": name,
         "url": str(node.get("url", "")) or f"https://github.com/{name}",
-        "scope": scope,
-        "private": node.get("isPrivate") is True,
-        "archived": node.get("isArchived") is True,
+        "scope": "mine" if str(owner.get("login", "")) == login else "orgs",
         "pushedAt": str(node.get("pushedAt", "")),
-        "stars": int(node.get("stargazerCount", 0) or 0),
         "starred": node.get("viewerHasStarred") is True,
-        "openIssues": total_count(node.get("issues")),
-        "openPRs": total_count(node.get("pullRequests")),
     }
 
 
