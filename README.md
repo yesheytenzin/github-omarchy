@@ -29,6 +29,10 @@ The **Orgs** toggle beside the tabs switches between the two scopes:
 | off | `mine` | repos owned by your account (`user:<login>`) |
 | on | `orgs` | repos owned by organizations you can reach, one search per org |
 
+Personal reads neutral and organizations read in the theme's accent colour:
+the toggle wears the scope's colour, and so does the repo line under every
+title, so the list itself says which side you are looking at.
+
 Organizations are discovered from your memberships and from the orgs that own
 repos you can see, so a private membership still shows up. `m` flips the same
 toggle, and the choice sticks: it lives in

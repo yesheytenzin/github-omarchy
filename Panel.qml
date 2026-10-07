@@ -34,6 +34,10 @@ Panel {
   readonly property var counts: root.service ? root.service.counts : GithubModel.countsFor(GithubModel.emptyScopes())
   readonly property string scope: root.service ? root.service.scope : "mine"
   readonly property string tab: root.service ? root.service.tab : "issues"
+  // Mine reads neutral; organizations read in the theme accent. The tint
+  // rides on the toggle and on the repo line of every row, so the scope is
+  // legible from the list itself, not only from the chip.
+  readonly property color scopeTint: root.scope === "orgs" ? Color.accent : root.dim
   readonly property var scopeCounts: scope === "orgs" ? counts.orgs : counts.mine
   readonly property int shownIssues: scopeCounts.issues
   readonly property int shownPrs: scopeCounts.prs
@@ -233,16 +237,17 @@ Panel {
             }
           }
 
-          // Scope toggle: off is personal, on is organizations. The chips it
-          // replaced showed both counts at once; the hero line carries them now.
+          // Scope toggle. It names the scope it is showing, and colours
+          // itself to match that scope's tint: neutral for personal, accent
+          // for organizations.
           Button {
             readonly property bool on: root.scope === "orgs"
-            text: "Orgs"
+            text: on ? "Orgs" : "Personal"
             selected: on
             hasCursor: root.section === "tabs" && root.tabIndex === root.tabOptions.length
             bordered: true
-            tooltipText: "Organizations — off shows personal repos only"
-            foreground: root.foreground
+            tooltipText: on ? "Organizations — click for personal" : "Personal — click for organizations"
+            foreground: on ? Color.accent : root.foreground
             fontFamily: root.fontFamily
             onClicked: if (root.service) root.service.toggleScope()
             onHovered: function(isHovered) {
@@ -328,7 +333,7 @@ Panel {
                 visible: !rowSurface.isRepo
                 textFormat: Text.PlainText
                 text: rowSurface.item.repo
-                color: root.dim
+                color: root.scopeTint
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
                 elide: Text.ElideRight
@@ -340,7 +345,7 @@ Panel {
                 visible: rowSurface.isRepo
                 textFormat: Text.PlainText
                 text: rowSurface.item.nameWithOwner
-                color: root.foreground
+                color: root.scope === "orgs" ? Color.accent : root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
                 elide: Text.ElideRight
