@@ -75,8 +75,69 @@ function normalizeItem(raw) {
     reviewDecision: String(raw.reviewDecision || ""),
     labels: labels,
     comments: Number(raw.comments || 0),
-    needsMe: raw.needsMe === true
+    assigned: raw.assigned === true,
+    reviewRequested: raw.reviewRequested === true,
+    needsMe: raw.needsMe === true || raw.assigned === true || raw.reviewRequested === true
   }
+}
+
+// ---- state colouring ------------------------------------------------------
+//
+// Tones, worst first. The panel maps a tone to one theme-aware colour (and
+// tints the chip from it); keeping the names here means the rules are
+// testable without a running shell.
+//
+//   urgent   something is wrong or waiting on you hard (red)
+//   warning  a review has to happen before it can move (yellow)
+//   success  approved and moving (green)
+//   accent   yours, but not blocked (the theme accent)
+//   dim      parked: drafts, and rows with nothing to say
+
+var TONES = ["dim", "accent", "success", "warning", "urgent"]
+
+function toneRank(tone) {
+  var index = TONES.indexOf(String(tone || ""))
+  return index < 0 ? 0 : index
+}
+
+function worseTone(a, b) {
+  return toneRank(a) >= toneRank(b) ? a : b
+}
+
+// The review state of a pull request: what the PR is waiting for.
+function stateChip(item) {
+  if (!item || item.type !== "pr") return null
+  if (item.draft) return { label: "DRAFT", tone: "dim" }
+  switch (item.reviewDecision) {
+  case "APPROVED":
+    return { label: "APPROVED", tone: "success" }
+  case "CHANGES_REQUESTED":
+    return { label: "CHANGES REQUESTED", tone: "urgent" }
+  case "REVIEW_REQUIRED":
+    return { label: "NEEDS REVIEW", tone: "warning" }
+  default:
+    return null
+  }
+}
+
+// Why this row is yours: your review is the blocking one, or it is assigned
+// to you. Shown on every row that has one, issues included.
+function youChip(item) {
+  if (!item) return null
+  if (item.reviewRequested) return { label: "YOUR REVIEW", tone: "urgent" }
+  if (item.assigned) return { label: "ASSIGNED", tone: "accent" }
+  return null
+}
+
+// One tone for the row as a whole, used to colour the type glyph so a scan
+// down the left edge reads the states without reading the chips.
+function rowTone(item) {
+  var tone = "dim"
+  var state = stateChip(item)
+  var you = youChip(item)
+  if (state) tone = worseTone(tone, state.tone)
+  if (you) tone = worseTone(tone, you.tone)
+  return tone
 }
 
 // The whole payload or null. Anything unexpected is rejected rather than

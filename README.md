@@ -29,6 +29,26 @@ repos you can see, so a private membership still shows up. The toggle sticks:
 it lives in `~/.local/state/omarchy/github-oma/state.json` and survives
 restarts.
 
+## States and colours
+
+Each row carries the state that decides what happens next, and why it is
+yours, as tinted chips:
+
+| Chip | Colour | Meaning |
+|------|--------|---------|
+| `APPROVED` | green | the pull request is approved |
+| `CHANGES REQUESTED` | red | a reviewer asked for changes |
+| `NEEDS REVIEW` | yellow | waiting on a review before it can move |
+| `DRAFT` | grey | still a draft |
+| `YOUR REVIEW` | red | your review is the one being waited on |
+| `ASSIGNED` | accent | assigned to you |
+
+The issue/PR glyph at the left of every row takes the colour of its worst
+state, so one scan down that column reads the whole list; the row itself is
+also tinted while the keyboard cursor is on it. Green and yellow are picked
+for the active theme's light or dark background, since the shell has no
+token for either; red, grey, and the accent come from the theme.
+
 ## Requirements
 
 The official GitHub CLI, installed and authenticated:

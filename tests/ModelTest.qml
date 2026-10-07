@@ -43,6 +43,7 @@ QtObject {
       testStrings()
       testLabels()
       testNotices()
+      testChips()
     } catch (error) {
       // A throw would otherwise leave qml6 running with nothing to exit it.
       failures++
@@ -228,5 +229,59 @@ QtObject {
     contains(Model.errorNotice("timeout", "").title, "did not answer", "timeout is explained")
     contains(Model.errorNotice("fetch-failed", "").hint, "retry", "fetch failures offer a retry")
     expectEqual(Model.errorNotice("mystery", "the helper exploded").title, "the helper exploded", "an unknown kind shows the message")
+  }
+
+  // ---- state chips --------------------------------------------------------
+
+  function pr(extras) {
+    var entry = item("https://x/pull", "2026-10-05T08:00:00Z", { type: "pr" })
+    for (var key in (extras || {})) entry[key] = extras[key]
+    return entry
+  }
+
+  function testChips() {
+    // The flags the helper sends have to survive parsing first: a chip can
+    // only say "assigned" if the row still knows it was.
+    var parsed = parse({
+      ok: true,
+      scopes: {
+        mine: {
+          issues: field(1, [item("https://x/a", "2026-10-05T08:00:00Z", { assigned: true })], false),
+          prs: field(1, [item("https://x/p", "2026-10-05T08:00:00Z", { type: "pr", assigned: true })], false)
+        },
+        orgs: { issues: field(0, [], false), prs: field(0, [], false) }
+      }
+    })
+    expectEqual(parsed.scopes.mine.issues.items[0].assigned, "true", "an assignment survives parsing")
+    expectEqual(parsed.scopes.mine.issues.items[0].needsMe, "true", "an assignment counts as yours")
+    expectEqual(parsed.scopes.mine.prs.items[0].reviewRequested, "false", "a missing review flag stays false")
+
+    // Pull request state.
+    expectEqual(Model.stateChip(pr({ draft: true })).label, "DRAFT", "a draft says so")
+    expectEqual(Model.stateChip(pr({ draft: true })).tone, "dim", "a draft is dim")
+    expectEqual(Model.stateChip(pr({ reviewDecision: "APPROVED" })).tone, "success", "approved is success")
+    expectEqual(Model.stateChip(pr({ reviewDecision: "CHANGES_REQUESTED" })).tone, "urgent", "changes requested is urgent")
+    expectEqual(Model.stateChip(pr({ reviewDecision: "CHANGES_REQUESTED" })).label, "CHANGES REQUESTED", "changes requested reads in full")
+    expectEqual(Model.stateChip(pr({ reviewDecision: "REVIEW_REQUIRED" })).tone, "warning", "needs review is a warning")
+    expectEqual(Model.stateChip(pr({ reviewDecision: "REVIEW_REQUIRED" })).label, "NEEDS REVIEW", "needs review reads plainly")
+    expectEqual(Model.stateChip(pr({})), null, "a pull request with no decision has no state chip")
+    expectEqual(Model.stateChip(item("https://x/i", "2026-10-05T08:00:00Z")), null, "issues have no review state")
+
+    // Why the row is yours.
+    expectEqual(Model.youChip(item("https://x/i", "2026-10-05T08:00:00Z", { assigned: true })).label, "ASSIGNED", "an assigned row says so")
+    expectEqual(Model.youChip(item("https://x/i", "2026-10-05T08:00:00Z", { assigned: true })).tone, "accent", "an assignment is accent")
+    expectEqual(Model.youChip(pr({ reviewRequested: true })).tone, "urgent", "your review is urgent")
+    expectEqual(Model.youChip(pr({ reviewRequested: true, assigned: true })).label, "YOUR REVIEW", "your review outranks assigned")
+    expectEqual(Model.youChip(pr({})), null, "a row you only authored gets no chip")
+
+    // The row tone drives the type glyph's colour.
+    expectEqual(Model.rowTone(pr({ reviewDecision: "CHANGES_REQUESTED" })), "urgent", "changes requested colours the row")
+    expectEqual(Model.rowTone(pr({ reviewDecision: "REVIEW_REQUIRED" })), "warning", "needs review colours the row")
+    expectEqual(Model.rowTone(pr({ reviewDecision: "APPROVED" })), "success", "approved colours the row")
+    expectEqual(Model.rowTone(pr({ draft: true })), "dim", "a draft stays dim")
+    expectEqual(Model.rowTone(pr({ reviewRequested: true })), "urgent", "your review colours the row")
+    expectEqual(Model.rowTone(item("https://x/i", "2026-10-05T08:00:00Z", { assigned: true })), "accent", "assigned is accent")
+    expectEqual(Model.rowTone(item("https://x/i", "2026-10-05T08:00:00Z")), "dim", "a plain row takes no colour")
+    expectEqual(Model.rowTone(pr({ reviewDecision: "APPROVED", reviewRequested: true })), "urgent", "your review outranks approved")
   }
 }

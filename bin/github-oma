@@ -67,6 +67,7 @@ fragment PrParts on PullRequest {
   number title url updatedAt isDraft reviewDecision
   repository { nameWithOwner }
   labels(first: 3) { nodes { name color } }
+  assignees(first: 5) { nodes { login } }
   reviewRequests(first: 5) { nodes { requestedReviewer { ... on User { login } } } }
 }
 """
@@ -227,6 +228,10 @@ def normalize_item(node: dict, kind: str, scope: str, login: str) -> dict:
         "comments": total_count(node.get("comments")),
         "assignees": assignees,
         "reviewers": reviewers,
+        # Split apart so the panel can colour "assigned to you" differently
+        # from "your review is requested"; the row treats either as yours.
+        "assigned": login in assignees,
+        "reviewRequested": login in reviewers,
         "needsMe": login in assignees or login in reviewers,
     }
 

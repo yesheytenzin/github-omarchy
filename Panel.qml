@@ -48,6 +48,53 @@ Panel {
   property int scopeIndex: 0
   property int listIndex: 0
 
+  // State colours. Green and yellow have no shell token, so they follow the
+  // theme's light/dark background rather than hard-coding one green that only
+  // reads on half the themes; red and the accent are already theme tokens.
+  readonly property bool lightTheme: {
+    var base = Color.background
+    return (0.299 * base.r + 0.587 * base.g + 0.114 * base.b) > 0.5
+  }
+  readonly property color successColor: root.lightTheme ? "#1a7f37" : "#3fb950"
+  readonly property color warningColor: root.lightTheme ? "#9a6700" : "#d29922"
+
+  function toneColor(tone) {
+    switch (String(tone || "")) {
+    case "urgent": return Color.urgent
+    case "warning": return root.warningColor
+    case "success": return root.successColor
+    case "accent": return Color.accent
+    default: return root.dim
+    }
+  }
+
+  // A small tinted pill: fill and border from the tone, label in the tone.
+  // Used for review state ("APPROVED", "NEEDS REVIEW") and for why a row is
+  // yours ("ASSIGNED", "YOUR REVIEW").
+  component ToneChip: BorderSurface {
+    id: chip
+    property string label: ""
+    property color tone: root.dim
+
+    implicitWidth: chipLabel.implicitWidth + Style.spacing.sm * 2
+    implicitHeight: chipLabel.implicitHeight + Style.spacing.xxs * 2
+    radius: Style.cornerRadius
+    color: Qt.rgba(chip.tone.r, chip.tone.g, chip.tone.b, 0.15)
+    borderSpec: Border.controlSpec("normal", chip.tone, chip.tone)
+
+    Text {
+      id: chipLabel
+      anchors.centerIn: parent
+      textFormat: Text.PlainText
+      text: chip.label
+      color: chip.tone
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      font.bold: true
+      font.letterSpacing: 0.6
+    }
+  }
+
   function clamp(value, low, high) { return Math.max(low, Math.min(high, value)) }
 
   function syncIndexes() {
@@ -301,9 +348,11 @@ Panel {
 
                 Text {
                   textFormat: Text.PlainText
-                  // nf-md-alert_circle_outline / nf-md-source_pull.
+                  // nf-md-alert_circle_outline / nf-md-source_pull, coloured by
+                  // the row's worst state so the glyph column reads as a column
+                  // of states.
                   text: rowSurface.item.type === "pr" ? "󰓂" : "󰗖"
-                  color: rowSurface.item.needsMe ? Color.accent : root.dim
+                  color: root.toneColor(GithubModel.rowTone(rowSurface.item))
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall
                   Layout.alignment: Qt.AlignVCenter
@@ -317,6 +366,14 @@ Panel {
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.body
                   elide: Text.ElideRight
+                  Layout.alignment: Qt.AlignVCenter
+                }
+
+                ToneChip {
+                  readonly property var state: GithubModel.stateChip(rowSurface.item)
+                  visible: state !== null
+                  label: state ? state.label : ""
+                  tone: state ? root.toneColor(state.tone) : root.dim
                   Layout.alignment: Qt.AlignVCenter
                 }
 
@@ -342,7 +399,7 @@ Panel {
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall
                   elide: Text.ElideRight
-                  Layout.maximumWidth: parent.width * 0.55
+                  Layout.maximumWidth: parent.width * 0.45
                 }
 
                 Repeater {
@@ -369,27 +426,13 @@ Panel {
                   }
                 }
 
-                Text {
-                  textFormat: Text.PlainText
-                  visible: rowSurface.item.draft || rowSurface.item.reviewDecision !== ""
-                  text: rowSurface.item.draft ? "DRAFT" : rowSurface.item.reviewDecision.replace(/_/g, " ")
-                  color: rowSurface.item.reviewDecision === "CHANGES_REQUESTED" ? Color.urgent : root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                  font.letterSpacing: 0.8
-                }
-
                 Item { Layout.fillWidth: true }
 
-                Text {
-                  textFormat: Text.PlainText
-                  visible: rowSurface.item.needsMe
-                  text: "→ you"
-                  color: Color.accent
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
+                ToneChip {
+                  readonly property var yours: GithubModel.youChip(rowSurface.item)
+                  visible: yours !== null
+                  label: yours ? yours.label : ""
+                  tone: yours ? root.toneColor(yours.tone) : root.dim
                 }
               }
             }

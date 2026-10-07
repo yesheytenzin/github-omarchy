@@ -57,7 +57,21 @@ PULL = {
     "isDraft": False,
     "reviewDecision": "REVIEW_REQUIRED",
     "labels": {"nodes": []},
+    "assignees": {"nodes": []},
     "reviewRequests": {"nodes": [{"requestedReviewer": {"login": LOGIN}}]},
+}
+
+APPROVED_PULL = {
+    "number": 12,
+    "title": "[NORMAL] Profile",
+    "url": "https://github.com/yesheytenzin/job_application_portal/pull/12",
+    "updatedAt": "2026-07-30T18:00:37Z",
+    "repository": {"nameWithOwner": "yesheytenzin/job_application_portal"},
+    "isDraft": False,
+    "reviewDecision": "APPROVED",
+    "labels": {"nodes": [{"name": "ready", "color": "0e8a16"}]},
+    "assignees": {"nodes": [{"login": LOGIN}]},
+    "reviewRequests": {"nodes": []},
 }
 
 ORG_ISSUE = {
@@ -80,6 +94,7 @@ ORG_PULL = {
     "isDraft": True,
     "reviewDecision": "",
     "labels": {"nodes": [{"name": "release", "color": "1d76db"}]},
+    "assignees": {"nodes": []},
     "reviewRequests": {"nodes": []},
 }
 
@@ -92,7 +107,7 @@ def graphql_payload() -> dict:
     return {
         "data": {
             "mineIssues": search(3, [ISSUE, SECOND_ISSUE]),
-            "minePrs": search(1, [PULL]),
+            "minePrs": search(2, [PULL, APPROVED_PULL]),
             "orgIssues0": search(4, [ORG_ISSUE]),
             "orgPrs0": search(0, []),
             "orgIssues1": search(0, []),
