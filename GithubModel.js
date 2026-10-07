@@ -33,7 +33,68 @@ function clampScope(value) {
 }
 
 function clampTab(value) {
-  return value === "prs" ? "prs" : "issues"
+  if (value === "prs") return "prs"
+  if (value === "repos") return "repos"
+  return "issues"
+}
+
+function emptyRepoBucket() {
+  return { count: 0, truncated: false, items: [] }
+}
+
+// The helper buckets repos by who owns them, so the scope chips can label
+// themselves and the list can filter without re-deriving anything.
+function emptyRepoField() {
+  return { mine: emptyRepoBucket(), orgs: emptyRepoBucket(), other: emptyRepoBucket() }
+}
+
+function normalizeRepo(raw) {
+  if (!isObject(raw)) return null
+  var name = String(raw.nameWithOwner || "")
+  var url = String(raw.url || "")
+  if (name === "" && url === "") return null
+  return {
+    kind: "repo",
+    nameWithOwner: name !== "" ? name : url,
+    url: url !== "" ? url : "https://github.com/" + name,
+    scope: raw.scope === "orgs" ? "orgs" : (raw.scope === "other" ? "other" : "mine"),
+    private: raw.private === true,
+    archived: raw.archived === true,
+    pushedAt: String(raw.pushedAt || ""),
+    pushedAtMs: Date.parse(String(raw.pushedAt || "")) || 0,
+    stars: Number(raw.stars || 0),
+    starred: raw.starred === true,
+    openIssues: Number(raw.openIssues || 0),
+    openPRs: Number(raw.openPRs || 0)
+  }
+}
+
+function normalizeRepoBucket(scope, raw) {
+  var bucket = emptyRepoBucket()
+  if (!isObject(raw)) return bucket
+  bucket.count = Number(raw.count || 0)
+  bucket.truncated = raw.truncated === true
+  if (Array.isArray(raw.items)) {
+    for (var i = 0; i < raw.items.length; i++) {
+      var repo = normalizeRepo(raw.items[i])
+      if (!repo) continue
+      // The bucket is the authority on where a repo belongs; the row only
+      // carries the label.
+      repo.scope = scope
+      bucket.items.push(repo)
+    }
+  }
+  if (bucket.count < bucket.items.length) bucket.count = bucket.items.length
+  return bucket
+}
+
+function normalizeRepoField(raw) {
+  if (!isObject(raw)) return emptyRepoField()
+  return {
+    mine: normalizeRepoBucket("mine", raw.mine),
+    orgs: normalizeRepoBucket("orgs", raw.orgs),
+    other: normalizeRepoBucket("other", raw.other)
+  }
 }
 
 function isObject(value) {
@@ -172,7 +233,8 @@ function parseRefresh(raw) {
       login: "",
       orgs: [],
       fetchedAt: Number(parsed.fetchedAt || 0),
-      scopes: emptyScopes()
+      scopes: emptyScopes(),
+      repos: emptyRepoField()
     }
   }
 
@@ -189,7 +251,8 @@ function parseRefresh(raw) {
     scopes: {
       mine: { issues: normalizeField(parsed.scopes.mine.issues), prs: normalizeField(parsed.scopes.mine.prs) },
       orgs: { issues: normalizeField(parsed.scopes.orgs.issues), prs: normalizeField(parsed.scopes.orgs.prs) }
-    }
+    },
+    repos: normalizeRepoField(parsed.repos)
   }
 }
 
@@ -312,6 +375,100 @@ function truncationHint(scopes, scope, tab) {
   var field = fieldFor(scopes, scope, tab)
   if (!field.truncated || field.count <= field.items.length) return ""
   return "Showing the most recent " + field.items.length + " of " + field.count + "."
+}
+
+// ---- repos ----------------------------------------------------------------
+//
+// The repos view is a different list from the issue/PR searches: every repo
+// the viewer can reach, tagged by who owns it. "Personal" shows the account's
+// own repos, "Orgs" the organizations', and "Both" everything — including
+// repos owned by other people that the viewer can still reach.
+
+// Starred first, freshest push next, then name. One comparator, not three
+// stable passes: this engine's Array.sort does not promise stability, so
+// equal-keyed rows would come back in arbitrary order.
+function compareRepos(a, b) {
+  if (a.starred !== b.starred) return a.starred ? -1 : 1
+  if (a.pushedAtMs !== b.pushedAtMs) return b.pushedAtMs - a.pushedAtMs
+  return a.nameWithOwner.toLowerCase() < b.nameWithOwner.toLowerCase() ? -1
+    : (a.nameWithOwner.toLowerCase() > b.nameWithOwner.toLowerCase() ? 1 : 0)
+}
+
+function reposFor(repos, scope) {
+  var field = isObject(repos) ? repos : emptyRepoField()
+  var name = clampScope(scope)
+  var items = []
+  var keys = name === "mine" ? ["mine"] : (name === "orgs" ? ["orgs"] : ["mine", "orgs", "other"])
+  for (var k = 0; k < keys.length; k++) {
+    var bucket = field[keys[k]] || emptyRepoBucket()
+    for (var i = 0; i < bucket.items.length; i++) items.push(bucket.items[i])
+  }
+  items.sort(compareRepos)
+  return items
+}
+
+function bucketCount(bucket) {
+  if (!isObject(bucket)) return 0
+  var declared = Number(bucket.count || 0)
+  var shown = Array.isArray(bucket.items) ? bucket.items.length : 0
+  // The declared total wins while it is larger; the rows win when a payload
+  // arrives without counts at all.
+  return Math.max(declared, shown)
+}
+
+function repoCountFor(repos, scope) {
+  var field = isObject(repos) ? repos : emptyRepoField()
+  var name = clampScope(scope)
+  if (name === "mine") return bucketCount(field.mine)
+  if (name === "orgs") return bucketCount(field.orgs)
+  return bucketCount(field.mine) + bucketCount(field.orgs) + bucketCount(field.other)
+}
+
+function repoMeta(repos, scope, fetchedAtSec, loading, nowMs) {
+  var label = plural(repoCountFor(repos, scope), "repo", "repos")
+  if (loading) return "refreshing — " + label
+  if (!fetchedAtSec) return label
+  var age = relativeTime(fetchedAtSec * 1000, nowMs)
+  return label + (age === "now" ? " · updated just now" : " · updated " + age + " ago")
+}
+
+// The second line of a repo row: what is open there, and when it last moved.
+function repoLine(repo, nowMs) {
+  if (!isObject(repo)) return ""
+  var parts = [
+    plural(Number(repo.openIssues || 0), "open issue", "open issues"),
+    plural(Number(repo.openPRs || 0), "open pull request", "open pull requests")
+  ]
+  var pushed = relativeTime(Number(repo.pushedAtMs || 0), nowMs)
+  if (pushed !== "") {
+    parts.push(pushed === "now" ? "pushed just now" : "pushed " + pushed + " ago")
+  }
+  return parts.join(" · ")
+}
+
+function repoCounts(repos) {
+  return {
+    mine: repoCountFor(repos, "mine"),
+    orgs: repoCountFor(repos, "orgs"),
+    all: repoCountFor(repos, "all")
+  }
+}
+
+function reposTruncationHint(repos, scope) {
+  var field = isObject(repos) ? repos : emptyRepoField()
+  var name = clampScope(scope)
+  var keys = name === "mine" ? ["mine"] : (name === "orgs" ? ["orgs"] : ["mine", "orgs", "other"])
+  var shown = 0
+  var total = 0
+  var truncated = false
+  for (var i = 0; i < keys.length; i++) {
+    var bucket = field[keys[i]] || emptyRepoBucket()
+    shown += Array.isArray(bucket.items) ? bucket.items.length : 0
+    total += bucketCount(bucket)
+    truncated = truncated || bucket.truncated === true
+  }
+  if (!truncated || total <= shown) return ""
+  return "Showing the most recent " + shown + " of " + total + "."
 }
 
 function relativeTime(ms, nowMs) {

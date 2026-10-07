@@ -28,6 +28,7 @@ Item {
   property string login: ""
   property var orgs: []
   property var scopes: GithubModel.emptyScopes()
+  property var repos: GithubModel.emptyRepoField()
   property int fetchedAt: 0
 
   property bool loading: false
@@ -40,7 +41,11 @@ Item {
   property string tab: "issues"
 
   readonly property var counts: GithubModel.countsFor(scopes)
-  readonly property var rows: GithubModel.itemsFor(scopes, scope, tab)
+  readonly property var rows: root.tab === "repos"
+    ? GithubModel.reposFor(root.repos, root.scope)
+    : GithubModel.itemsFor(scopes, scope, tab)
+  readonly property int repoCount: GithubModel.repoCountFor(root.repos, root.scope)
+  readonly property var repoCounts: GithubModel.repoCounts(root.repos)
   readonly property int badgeCount: GithubModel.badgeCount(scopes, scope)
   readonly property int attentionCount: GithubModel.attentionCount(scopes, scope)
 
@@ -48,6 +53,11 @@ Item {
   // freeze at whatever it said when the panel opened.
   property double nowMs: Date.now()
   readonly property string metaText: GithubModel.updatedMeta(scopes, scope, fetchedAt, loading, nowMs)
+  readonly property string repoMetaText: GithubModel.repoMeta(root.repos, scope, fetchedAt, loading, nowMs)
+  readonly property string heroText: root.tab === "repos" ? root.repoMetaText : root.metaText
+  readonly property string truncationHint: root.tab === "repos"
+    ? GithubModel.reposTruncationHint(root.repos, root.scope)
+    : GithubModel.truncationHint(scopes, scope, tab)
 
   function nowSeconds() { return Math.floor(Date.now() / 1000) }
 
@@ -91,6 +101,7 @@ Item {
     root.login = payload.login
     root.orgs = payload.orgs
     root.scopes = payload.scopes
+    root.repos = payload.repos
     root.fetchedAt = payload.fetchedAt
     return true
   }

@@ -43,6 +43,7 @@ QtObject {
       testStrings()
       testLabels()
       testScopes()
+      testRepos()
       testNotices()
       testChips()
     } catch (error) {
@@ -251,6 +252,71 @@ QtObject {
     expectEqual(Model.updatedMeta(scopes, "orgs", 0, false, 0).indexOf("personal") !== -1, "false", "the orgs hero counts nothing personal")
     expectEqual(Model.truncationHint(scopes, "orgs", "issues"), "Showing the most recent 1 of 4.", "orgs truncation is explained")
     expectEqual(Model.truncationHint(Model.emptyScopes(), "orgs", "issues"), "", "an empty org scope is not truncated")
+  }
+
+  // ---- repos --------------------------------------------------------------
+
+  function repoBucket(count, items, truncated) {
+    return { count: count, truncated: truncated === true, items: items }
+  }
+
+  function reposField() {
+    return {
+      mine: repoBucket(2, [
+        { kind: "repo", nameWithOwner: "yesheytenzin/job_application_portal", url: "https://x/p",
+          pushedAt: "2026-08-03T04:57:25Z", openIssues: 0, openPRs: 2 },
+        { kind: "repo", nameWithOwner: "yesheytenzin/auto-workspace", url: "https://x/a",
+          pushedAt: "2026-10-07T09:15:47Z", openIssues: 1, openPRs: 0, starred: true, private: true }
+      ]),
+      orgs: repoBucket(30, [
+        { kind: "repo", nameWithOwner: "acme-corp/widgets", url: "https://x/l",
+          pushedAt: "2026-10-06T10:00:00Z", openIssues: 6, openPRs: 16 }
+      ], true),
+      other: repoBucket(1, [
+        { kind: "repo", nameWithOwner: "ChodajMi/demoapp", url: "https://x/d",
+          pushedAt: "2026-10-08T00:00:00Z", archived: true, stars: 3 }
+      ])
+    }
+  }
+
+  function testRepos() {
+    expectEqual(Model.clampTab("repos"), "repos", "repos is a tab")
+    expectEqual(Model.parseState('{"tab":"repos"}').tab, "repos", "a repos tab round-trips")
+    expect(Model.serializeState("mine", "repos").indexOf('"tab": "repos"') !== -1, "a repos tab serializes")
+
+    var payload = parse({ ok: true, scopes: Model.emptyScopes(), repos: reposField() })
+    expectEqual(payload.repos.mine.items.length, 2, "own repos survive parsing")
+    expectEqual(payload.repos.orgs.count, 30, "the org bucket keeps its total")
+    expectEqual(payload.repos.orgs.items[0].scope, "orgs", "the bucket stamps the row's scope")
+    expectEqual(payload.repos.other.items[0].archived, "true", "the archive flag survives")
+
+    expectEqual(Model.reposFor(payload.repos, "mine").length, 2, "personal shows the repos you own")
+    expectEqual(Model.reposFor(payload.repos, "orgs")[0].nameWithOwner, "acme-corp/widgets", "orgs shows org repos")
+
+    var all = Model.reposFor(payload.repos, "all")
+    expectEqual(all.length, 4, "both shows every bucket")
+    expectEqual(all[0].nameWithOwner, "yesheytenzin/auto-workspace", "the starred repo leads, however fresh the others are")
+    expectEqual(all[3].nameWithOwner, "yesheytenzin/job_application_portal", "the stalest repo is last")
+
+    expectEqual(Model.repoCountFor(payload.repos, "mine"), 2, "the personal chip counts owned repos")
+    expectEqual(Model.repoCountFor(payload.repos, "orgs"), 30, "the orgs chip counts the whole org, not just the rows")
+    expectEqual(Model.repoCountFor(payload.repos, "all"), 33, "the both chip adds the buckets up")
+    expectEqual(Model.repoCountFor(Model.emptyRepoField(), "all"), 0, "an empty repo list counts zero")
+    var countless = { mine: { count: 0, items: Model.reposFor(payload.repos, "mine") }, orgs: {}, other: {} }
+    expectEqual(Model.repoCountFor(countless, "mine"), 2, "a bucket without a total falls back to its rows")
+
+    contains(Model.repoMeta(payload.repos, "orgs", 0, false, 0), "30 repos", "the repos hero counts the org bucket")
+    contains(Model.repoMeta(payload.repos, "all", 0, true, 0), "refreshing", "the repos hero says when it is fetching")
+    contains(Model.repoMeta(payload.repos, "all", 1791365239, false, 1791365239 * 1000 + 60000), "updated 1m ago", "the repos hero ages the refresh")
+
+    var owned = Model.reposFor(payload.repos, "mine")[0]
+    contains(Model.repoLine(owned, owned.pushedAtMs), "1 open issue ·", "an issue count reads singular")
+    expectEqual(Model.repoLine(owned, owned.pushedAtMs), "1 open issue · 0 open pull requests · pushed just now", "a fresh push does not say 'now ago'")
+    expectEqual(Model.repoLine(owned, owned.pushedAtMs + 11 * 60 * 1000), "1 open issue · 0 open pull requests · pushed 11m ago", "a repo row ages its last push")
+
+    expectEqual(Model.reposTruncationHint(payload.repos, "orgs"), "Showing the most recent 1 of 30.", "a capped org bucket is explained")
+    expectEqual(Model.reposTruncationHint(payload.repos, "mine"), "", "a complete bucket is not explained")
+    expectEqual(Model.reposTruncationHint(payload.repos, "all"), "Showing the most recent 4 of 33.", "both reports the shortfall across buckets")
   }
 
   function testNotices() {

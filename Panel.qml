@@ -33,6 +33,7 @@ Panel {
   readonly property var rows: root.service ? root.service.rows : []
   readonly property var counts: root.service ? root.service.counts : GithubModel.countsFor(GithubModel.emptyScopes())
   readonly property string scope: root.service ? root.service.scope : "mine"
+  readonly property string tab: root.service ? root.service.tab : "issues"
   readonly property bool withMine: scope !== "orgs"
   readonly property bool withOrgs: scope !== "mine"
   readonly property int shownIssues: (withMine ? counts.mine.issues : 0) + (withOrgs ? counts.orgs.issues : 0)
@@ -40,16 +41,31 @@ Panel {
 
   // Personal, both, and organizations as one row of chips. "all" stays the
   // stored value for the merged view so existing state files keep working.
-  readonly property var scopeOptions: [
+  readonly property var repoCounts: root.service
+    ? root.service.repoCounts : { mine: 0, orgs: 0, all: 0 }
+  // The scope chips count what the current tab shows: items on the issue/PR
+  // tabs, repositories on the repos tab.
+  readonly property var scopeOptions: root.tab === "repos" ? [
+    { value: "mine", label: "Personal · " + repoCounts.mine },
+    { value: "all", label: "Both · " + repoCounts.all },
+    { value: "orgs", label: "Orgs · " + repoCounts.orgs }
+  ] : [
     { value: "mine", label: "Personal · " + (counts.mine.issues + counts.mine.prs) },
     { value: "all", label: "Both · " + (counts.mine.issues + counts.mine.prs + counts.orgs.issues + counts.orgs.prs) },
     { value: "orgs", label: "Orgs · " + (counts.orgs.issues + counts.orgs.prs) }
   ]
   readonly property int scopeCount: root.scopeOptions.length
+
+  // The tab row: the two involvement lists, then the repos view.
+  readonly property var tabOptions: [
+    { value: "issues", label: "Issues · " + root.shownIssues },
+    { value: "prs", label: "Pull requests · " + root.shownPrs },
+    { value: "repos", label: "Repos · " + (root.service ? root.service.repoCount : 0) }
+  ]
+  readonly property int tabCount: root.tabOptions.length
   readonly property var notice: root.service && root.service.errorKind !== ""
     ? GithubModel.errorNotice(root.service.errorKind, root.service.errorMessage) : null
-  readonly property string truncation: root.service
-    ? GithubModel.truncationHint(root.service.scopes, root.service.scope, root.service.tab) : ""
+  readonly property string truncation: root.service ? root.service.truncationHint : ""
 
   // Keyboard cursor. "tabs" and "scope" hold a chip index, "list" holds a row
   // index; Tab walks the three, j/k (and h/l) move inside the current one.
@@ -109,24 +125,26 @@ Panel {
 
   function syncIndexes() {
     if (!root.service) return
-    root.tabIndex = root.service.tab === "prs" ? 1 : 0
+    root.tabIndex = Math.max(0, tabValues().indexOf(root.service.tab))
     root.scopeIndex = Math.max(0, root.scopeValues().indexOf(root.service.scope))
   }
 
   // Chip order, and the values the chips carry. "all" is the merged view.
   function scopeValues() { return ["mine", "all", "orgs"] }
 
+  function tabValues() { return ["issues", "prs", "repos"] }
+
   function moveCursor(dx, dy) {
     var step = dy !== 0 ? dy : dx
     if (step === 0) return
-    if (root.section === "tabs") root.tabIndex = clamp(root.tabIndex + step, 0, 1)
+    if (root.section === "tabs") root.tabIndex = clamp(root.tabIndex + step, 0, root.tabCount - 1)
     else if (root.section === "scope") root.scopeIndex = clamp(root.scopeIndex + step, 0, root.scopeCount - 1)
     else if (root.rows.length > 0) root.listIndex = clamp(root.listIndex + step, 0, root.rows.length - 1)
   }
 
   function activate() {
     if (!root.service) return
-    if (root.section === "tabs") root.service.setTab(root.tabIndex === 0 ? "issues" : "prs")
+    if (root.section === "tabs") root.service.setTab(tabValues()[root.tabIndex])
     else if (root.section === "scope") root.service.setScope(scopeValues()[root.scopeIndex])
     else root.openSelection()
   }
@@ -193,6 +211,9 @@ Panel {
         } else if (text === "2") {
           root.service.setTab("prs")
           root.syncIndexes()
+        } else if (text === "3") {
+          root.service.setTab("repos")
+          root.syncIndexes()
         } else if (text === "g") {
           root.listIndex = 0
         } else if (text === "G") {
@@ -212,7 +233,7 @@ Panel {
         PanelHero {
           width: parent.width
           title: "GitHub"
-          meta: root.service ? root.service.metaText : ""
+          meta: root.service ? root.service.heroText : ""
           detail: root.service && root.service.login !== "" ? "@" + root.service.login : ""
           foreground: root.foreground
           fontFamily: root.fontFamily
@@ -254,10 +275,7 @@ Panel {
         }
 
         ButtonGroup {
-          options: [
-            { value: "issues", label: "Issues · " + root.shownIssues },
-            { value: "prs", label: "Pull requests · " + root.shownPrs }
-          ]
+          options: root.tabOptions
           value: root.service ? root.service.tab : "issues"
           foreground: root.foreground
           fontFamily: root.fontFamily
@@ -321,7 +339,10 @@ Panel {
             required property int index
 
             readonly property var item: rowSurface.modelData
-            readonly property string timeText: GithubModel.relativeTime(rowSurface.item.updatedAtMs, root.service ? root.service.nowMs : Date.now())
+            readonly property bool isRepo: rowSurface.item.kind === "repo"
+            readonly property string timeText: GithubModel.relativeTime(
+              rowSurface.isRepo ? rowSurface.item.pushedAtMs : rowSurface.item.updatedAtMs,
+              root.service ? root.service.nowMs : Date.now())
 
             width: issueList.width
             height: rowColumn.implicitHeight + Style.spacing.sm * 2
@@ -352,8 +373,11 @@ Panel {
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.spacing.xxs
 
+              // ---- issue / pull request rows ----------------------------------
+
               RowLayout {
                 width: parent.width
+                visible: !rowSurface.isRepo
                 spacing: Style.spacing.sm
 
                 Text {
@@ -400,6 +424,7 @@ Panel {
 
               RowLayout {
                 width: parent.width
+                visible: !rowSurface.isRepo
                 spacing: Style.spacing.sm
 
                 Text {
@@ -413,7 +438,7 @@ Panel {
                 }
 
                 Repeater {
-                  model: rowSurface.item.labels
+                  model: rowSurface.isRepo ? [] : rowSurface.item.labels
 
                   Row {
                     spacing: Style.spacing.xxs
@@ -445,6 +470,71 @@ Panel {
                   tone: yours ? root.toneColor(yours.tone) : root.dim
                 }
               }
+
+              // ---- repo rows --------------------------------------------------
+
+              RowLayout {
+                width: parent.width
+                visible: rowSurface.isRepo
+                spacing: Style.spacing.sm
+
+                Text {
+                  textFormat: Text.PlainText
+                  // nf-md-star: a favourite marker, not a state.
+                  visible: rowSurface.item.starred === true
+                  text: "󰓎"
+                  color: root.toneColor("warning")
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  Layout.alignment: Qt.AlignVCenter
+                }
+
+                Text {
+                  Layout.fillWidth: true
+                  textFormat: Text.PlainText
+                  text: rowSurface.item.nameWithOwner
+                  color: rowSurface.item.archived === true ? root.dim : root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                  elide: Text.ElideRight
+                  Layout.alignment: Qt.AlignVCenter
+                }
+
+                ToneChip {
+                  visible: rowSurface.item.private === true
+                  label: "PRIVATE"
+                  tone: root.dim
+                  Layout.alignment: Qt.AlignVCenter
+                }
+
+                ToneChip {
+                  visible: rowSurface.item.archived === true
+                  label: "ARCHIVED"
+                  tone: root.toneColor("warning")
+                  Layout.alignment: Qt.AlignVCenter
+                }
+
+                Text {
+                  textFormat: Text.PlainText
+                  visible: rowSurface.timeText !== ""
+                  text: rowSurface.timeText
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  Layout.alignment: Qt.AlignVCenter
+                }
+              }
+
+              Text {
+                width: parent.width
+                visible: rowSurface.isRepo
+                textFormat: Text.PlainText
+                text: GithubModel.repoLine(rowSurface.item, root.service ? root.service.nowMs : Date.now())
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                elide: Text.ElideRight
+              }
             }
           }
 
@@ -455,7 +545,7 @@ Panel {
             textFormat: Text.PlainText
             text: root.notice !== null ? "Nothing to show"
               : root.service && root.service.loading ? "Loading…"
-              : "Nothing open. Enjoy."
+              : root.tab === "repos" ? "No repositories." : "Nothing open. Enjoy."
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
@@ -478,7 +568,7 @@ Panel {
         Text {
           width: parent.width
           textFormat: Text.PlainText
-          text: "j/k move · 1/2 issues/prs · m scope · enter open · r refresh · tab sections · esc close"
+          text: "j/k move · 1/2/3 tabs · m scope · enter open · r refresh · tab sections · esc close"
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption

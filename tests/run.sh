@@ -82,6 +82,23 @@ printf 'not json at all' > "$CACHE"
 out="$("$CLI" refresh --json 2>/dev/null)"
 jqis "a corrupt cache is ignored, not fatal" "$out" '.ok' "true"
 
+echo "== repos =="
+
+out="$("$CLI" refresh --max-age 300 2>/dev/null)"
+jqis "the account's own repos are counted" "$out" '.repos.mine.count' "2"
+jqis "own repos come as rows" "$out" '.repos.mine.items | length' "2"
+jqis "org repos come from the org query" "$out" '.repos.orgs.count' "2"
+jqis "org repo rows arrive" "$out" '.repos.orgs.items | length' "2"
+jqis "somebody else's repo is bucketed apart" "$out" '.repos.other.count' "1"
+jqis "starred repos sort first inside a bucket" "$out" '.repos.mine.items[0].nameWithOwner' "yesheytenzin/auto-workspace"
+jqis "the freshest push follows the starred one" "$out" '.repos.mine.items[1].nameWithOwner' "yesheytenzin/job_application_portal"
+jqis "org repos sort by push too" "$out" '.repos.orgs.items[0].nameWithOwner' "acme-corp/widgets"
+jqis "collaborator repos keep their own bucket" "$out" '.repos.other.items[0].nameWithOwner' "ChodajMi/demoapp"
+jqis "repo rows carry their open counts" "$out" '[.repos.orgs.items[] | select(.nameWithOwner == "acme-corp/widgets") | "\(.openIssues)/\(.openPRs)"][0]' "6/16"
+jqis "repo rows carry flags" "$out" '[.repos.other.items[] | select(.nameWithOwner == "ChodajMi/demoapp") | "\(.archived)/\(.stars)"][0]' "true/3"
+jqis "repo rows are typed for the row renderer" "$out" '.repos.mine.items[0].kind' "repo"
+jqis "a complete bucket is not truncated" "$out" '.repos.mine.truncated' "false"
+
 echo "== failures =="
 
 fresh

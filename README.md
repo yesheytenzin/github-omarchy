@@ -1,7 +1,8 @@
 # GitHub Oma
 
 Open issues and pull requests you are involved in, in the Omarchy bar — your
-personal repos by default, and one button away from your organizations too.
+personal repos by default, one button away from your organizations, and a
+third tab that browses the repos themselves.
 
 ```
 󰊤 7        the bar: the GitHub mark, the count in the current scope,
@@ -30,6 +31,24 @@ Organizations are discovered from your memberships and from the orgs that own
 repos you can see, so a private membership still shows up. `m` cycles
 Personal → Both → Orgs. The choice sticks: it lives in
 `~/.local/state/omarchy/github-oma/state.json` and survives restarts.
+
+## Repos
+
+The `Repos · n` tab lists repositories, not items. Rows are ordered starred
+first, then by the freshest push, then by name, and clicking one opens it:
+
+- `nameWithOwner` with a `PRIVATE` or `ARCHIVED` chip when either applies
+- `open issues · open pull requests · pushed …` underneath
+
+The scope chips filter this list exactly as they filter issues and PRs:
+`Personal` is the repos your account owns, `Orgs` the ones owned by your
+organizations, and `Both` everything you can reach — including repos owned by
+other people that you collaborate on.
+
+Organization repos come from a per-organization query sorted by push recency
+and capped at 50 each: GitHub's gateway answers 502 on heavier repo queries.
+When that cap bites, the panel says "showing the most recent 50 of 262" and
+the chip still shows the true total.
 
 ## States and colours
 
@@ -86,7 +105,7 @@ omarchy plugin enable tenzin.github-oma
 |-----|--------|
 | `j` / `k` | Move through the list (or the focused chip row) |
 | `Tab` / `Shift+Tab` | Cycle the sections: tabs → scope → list |
-| `1` / `2` | Issues / pull requests |
+| `1` / `2` / `3` | Issues / pull requests / repos |
 | `m` | Cycle the scope: Personal → Both → Orgs |
 | `Enter` / `o` | Open the selection in the browser |
 | `g` / `G` | Jump to the top / bottom |
@@ -155,6 +174,11 @@ service instance and caches imported JS libraries, so apply those with
 ```sh
 omarchy-restart-shell            # or: omarchy plugin disable/enable tenzin.github-oma
 ```
+
+If a restart still shows an older panel, the shell is serving a compiled QML
+artifact it considers current — `rm -rf ~/.cache/quickshell/qmlcache` and
+restart again. Copying files in with preserved timestamps (rsync -a, tar -p)
+is what usually triggers it.
 
 ## License
 

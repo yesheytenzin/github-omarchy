@@ -103,9 +103,53 @@ def search(count: int, nodes: list) -> dict:
     return {"issueCount": count, "pageInfo": {"hasNextPage": False}, "nodes": nodes}
 
 
+def repo(name, pushed, open_issues, open_prs, owner_type, owner, starred=False, private=False, archived=False, stars=0):
+    return {
+        "nameWithOwner": name,
+        "url": "https://github.com/" + name,
+        "isPrivate": private,
+        "isArchived": archived,
+        "pushedAt": pushed,
+        "stargazerCount": stars,
+        "viewerHasStarred": starred,
+        "owner": {"login": owner, "__typename": owner_type},
+        "issues": {"totalCount": open_issues},
+        "pullRequests": {"totalCount": open_prs},
+    }
+
+
+VIEWER = {
+    "owned": {"totalCount": 2},
+    "collab": {"totalCount": 1},
+    "repos": {
+        "totalCount": 3,
+        "pageInfo": {"hasNextPage": False},
+        "nodes": [
+            repo("yesheytenzin/auto-workspace", "2026-10-07T09:15:47Z", 1, 0, "User", "yesheytenzin", starred=True, private=True),
+            repo("yesheytenzin/job_application_portal", "2026-08-03T04:57:25Z", 0, 2, "User", "yesheytenzin"),
+            repo("ChodajMi/demoapp", "2026-09-01T00:00:00Z", 0, 0, "User", "ChodajMi", archived=True, stars=3),
+        ],
+    },
+}
+
+# Organization repos come from their own query, not from viewer.repositories.
+ORG_REPOS = {
+    "totalCount": 2,
+    "pageInfo": {"hasNextPage": False},
+    "nodes": [
+        repo("acme-corp/widgets", "2026-10-06T10:00:00Z", 6, 16, "Organization", "acme-corp"),
+        repo("acme-corp/toolkit", "2026-09-20T08:00:00Z", 0, 1, "Organization", "acme-corp"),
+    ],
+}
+
+
 def graphql_payload() -> dict:
     return {
         "data": {
+            "viewer": VIEWER,
+            # Mirrors GitHub: the org field wraps its connection.
+            "orgRepos0": {"repositories": ORG_REPOS},
+            "orgRepos1": {"repositories": {"totalCount": 0, "pageInfo": {"hasNextPage": False}, "nodes": []}},
             "mineIssues": search(3, [ISSUE, SECOND_ISSUE]),
             "minePrs": search(2, [PULL, APPROVED_PULL]),
             "orgIssues0": search(4, [ORG_ISSUE]),
