@@ -1,4 +1,4 @@
-# GitHub Oma
+# GitHub Omarchy
 
 Open issues and pull requests you are involved in, in the Omarchy bar — your
 personal repos by default, one button away from your organizations, and a
